@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuadrantes de Turnos</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Color picker library -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/classic.min.css">
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Cuadrantes de Turnos</h1>
+            <p class="subtitle">Sistema de gestión de turnos con colores personalizados, gestión de operarios y exportación a Excel</p>
+        </header>
+
+        <div class="month-header">
+            <h2 class="month-title" id="currentMonth">Mes Actual</h2>
+            <div class="month-nav">
+                <button id="prevMonth">&laquo; Mes Anterior</button>
+                <button id="nextMonth">Mes Siguiente &raquo;</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Calendar container -->
+            <div class="calendar-container">
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- Calendar will be generated here -->
+                </div>
+                <div class="calendar-actions">
+                    <button class="action-button" id="copySelection" disabled>Copiar Seleccionados</button>
+                    <button class="action-button" id="moveSelection" disabled>Mover Seleccionados</button>
+                    <button class="action-button" id="deleteSelection" disabled>Eliminar Seleccionados</button>
+                    <button class="action-button" id="clearMonthBtn">Borrar Mes Actual</button>
+                </div>
+            </div>
+
+            <!-- Controls container -->
+            <div class="controls">
+                <h2>Configuración de Turnos</h2>
+                
+                <!-- Shift configuration -->
+                <div class="form-group">
+                    <label for="shiftTitle">Nombre del Turno:</label>
+                    <input type="text" id="shiftTitle" placeholder="Mañana, Tarde, Noche, etc.">
+                </div>
+                
+                <div class="form-group">
+                    <label for="timeInputs">Horario:</label>
+                    <div class="time-input">
+                        <input type="time" id="startTime" value="06:00">
+                        <input type="time" id="endTime" value="14:00">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Color:</label>
+                    <div id="shiftColorPicker"></div>
+                    <div class="color-preview" id="colorPreview"></div>
+                </div>
+                
+                <button id="saveConfigBtn">Guardar Configuración</button>
+                <button id="updateConfigBtn" style="display: none;">Actualizar Configuración</button>
+                
+                <!-- Saved configurations -->
+                <div class="config-panel">
+                    <h4>Configuraciones Guardadas</h4>
+                    <div id="savedConfigs">
+                        <!-- Saved configs will appear here -->
+                    </div>
+                </div>
+                
+                <!-- Operator management -->
+                <div class="operators-panel">
+                    <h4>Gestión de Operarios</h4>
+                    <div class="add-operator">
+                        <input type="text" id="newOperator" placeholder="Nombre del operario">
+                        <button id="addOperatorBtn">Añadir</button>
+                    </div>
+                    <div id="operatorsList">
+                        <!-- Operators will appear here -->
+                    </div>
+                </div>
+                
+                <!-- Export options -->
+                <div class="export-panel">
+                    <h4>Exportar Cuadrantes</h4>
+                    <button id="exportExcelBtn">Exportar a Excel</button>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <input type="email" id="emailInput" placeholder="Enviar por email">
+                        <button id="emailScheduleBtn">Enviar</button>
+                        <div id="emailStatus"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Operator modal -->
+    <div id="operatorModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3 id="modalTitle">Añadir Operario</h3>
+            <div class="form-group">
+                <label for="operatorName">Nombre:</label>
+                <input type="text" id="operatorName" required>
+            </div>
+            <div class="form-group">
+                <label for="operatorLastName">Apellido:</label>
+                <input type="text" id="operatorLastName">
+            </div>
+            <div class="form-group">
+                <label for="operatorEmail">Email:</label>
+                <input type="email" id="operatorEmail">
+            </div>
+            <div class="form-group">
+                <label for="operatorPhone">Teléfono:</label>
+                <input type="tel" id="operatorPhone">
+            </div>
+            <button id="saveOperatorBtn">Guardar</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

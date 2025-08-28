@@ -878,6 +878,31 @@ function renderEvents() {
     
     // Update operator hours after rendering events
     updateOperatorHours();
+    updateMultipleShiftsIndicator();
+}
+
+function updateMultipleShiftsIndicator() {
+    const allCells = document.querySelectorAll('.calendar-cell');
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+
+    allCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+
+        const eventsInCell = events.filter(event =>
+            event.day === day &&
+            event.operatorId === operatorId &&
+            event.month === currentMonth &&
+            event.year === currentYear
+        );
+
+        if (eventsInCell.length > 1) {
+            cell.classList.add('multiple-shifts');
+        } else {
+            cell.classList.remove('multiple-shifts');
+        }
+    });
 }
 
 // Eliminar evento

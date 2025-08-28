@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', function() {
     generateCalendar();
     initColorPicker();
     
+    // Setup new functionality
+    setupKeyboardShortcuts();
+    setupContextMenu();
+    
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
     document.getElementById('updateConfigBtn').addEventListener('click', updateConfig);
@@ -216,6 +220,7 @@ function generateCalendar() {
             cell.addEventListener('dragover', handleDragOver);
             cell.addEventListener('dragleave', handleDragLeave);
             cell.addEventListener('drop', handleDrop);
+            cell.addEventListener('contextmenu', handleCellRightClick);
             
             // Mouse events for multi-select
             cell.addEventListener('mousedown', startCellSelection);
@@ -285,6 +290,9 @@ function handleCellClick(e) {
 // Selection functionality
 let isSelecting = false;
 let selectionStartCell = null;
+let copiedCells = [];
+let cutCells = [];
+let clipboard = null;
 
 function startCellSelection(e) {
     // Only start selection with Shift key
@@ -340,38 +348,9 @@ function updateSelectionButtons() {
     deleteBtn.disabled = selectedCells.length === 0;
 }
 
+// Updated to use new Excel-like functionality
 function copySelectedCells() {
-    if (selectedCells.length === 0) return;
-    
-    tempCopyEvents = [];
-    
-    // Get all events in selected cells
-    selectedCells.forEach(cell => {
-        const cellId = cell.dataset.cellId;
-        const day = parseInt(cell.dataset.day);
-        const operatorId = cell.dataset.operatorId;
-        
-        const cellEvents = events.filter(event => 
-            event.day === day && event.operatorId === operatorId
-        );
-        
-        tempCopyEvents.push(...cellEvents);
-    });
-    
-    if (tempCopyEvents.length > 0) {
-        showNotification(`${tempCopyEvents.length} turnos copiados. Haga clic en una celda para pegar.`, "success");
-        
-        // Change cursor to indicate copy mode
-        document.body.style.cursor = 'copy';
-        
-        // Add one-time click listener to paste
-        document.addEventListener('click', pasteEvents, { once: true });
-    } else {
-        showNotification("No hay turnos para copiar en las celdas seleccionadas", "warning");
-    }
-    
-    // Clear selection
-    clearCellSelection();
+    copySelection();
 }
 
 
@@ -437,37 +416,14 @@ function clearCellSelection() {
 }
 
 function moveSelectedCells() {
-    if (selectedCells.length === 0) return;
-    
-    tempCopyEvents = [];
-    
-    // Get all events in selected cells
-    selectedCells.forEach(cell => {
-        const cellId = cell.dataset.cellId;
-        const day = parseInt(cell.dataset.day);
-        const operatorId = cell.dataset.operatorId;
-        
-        const cellEvents = events.filter(event => 
-            event.day === day && event.operatorId === operatorId
-        );
-        
-        tempCopyEvents.push(...cellEvents.map(e => ({ ...e, originalId: e.id })));
-    });
-    
-    if (tempCopyEvents.length > 0) {
-        showNotification(`${tempCopyEvents.length} turnos listos para mover. Haga clic en una celda destino.`, "success");
-        
-        // Change cursor to indicate move mode
-        document.body.style.cursor = 'move';
-        
-        // Add one-time click listener to paste and delete originals
-        document.addEventListener('click', moveEvents, { once: true });
-    } else {
-        showNotification("No hay turnos para mover en las celdas seleccionadas", "warning");
+    if (selectedCells.length === 0) {
+        showNotification("Selecciona las celdas para mover", "warning");
+        return;
     }
     
-    // Clear selection
-    clearCellSelection();
+    // Use the new cut functionality
+    cutSelection();
+    showNotification("Celdas cortadas. Selecciona destino y pega (Ctrl+V)", "info");
 }
 
 function moveEvents(e) {
@@ -817,6 +773,9 @@ function renderEvents() {
     // Setup drag and drop after rendering events
     setupDragAndDrop();
     
+    // Update visual indicators for multiple shifts
+    updateMultipleShiftsIndicators();
+    
     // Update operator hours after rendering events
     updateOperatorHours();
 }
@@ -1043,15 +1002,27 @@ function clearCurrentMonth() {
 
 // Export to Excel
 function exportToExcel() {
-    if (operators.length === 0) {
-        showNotification("No hay operarios para exportar", "warning");
-        return;
-    }
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long' });
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    try {
+        console.log("Starting Excel export...");
+        
+        if (operators.length === 0) {
+            showNotification("No hay operarios para exportar", "warning");
+            return;
+        }
+        
+        // Check if XLSX library is loaded
+        if (typeof XLSX === 'undefined') {
+            showNotification("Error: Biblioteca XLSX no cargada", "error");
+            console.error("XLSX library not loaded");
+            return;
+        }
+        
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long' });
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        console.log("Excel export data:", { year, month, monthName, daysInMonth, operators: operators.length, events: events.length });
     
     // Create workbook
     const wb = XLSX.utils.book_new();
@@ -1219,9 +1190,16 @@ function exportToExcel() {
         XLSX.utils.book_append_sheet(wb, shiftWs, cleanShiftName);
     });
     
-    // Generate Excel file and trigger download
-    XLSX.writeFile(wb, `Cuadrantes_Completo_${monthName}_${year}.xlsx`);
-    showNotification(`Exportado a Excel con ${wb.SheetNames.length} hojas: resumen general, ${operators.length} operarios individuales y ${uniqueShifts.length} tipos de turno`, "success");
+        // Generate Excel file and trigger download
+        console.log("Generating Excel file with", wb.SheetNames.length, "sheets");
+        XLSX.writeFile(wb, `Cuadrantes_Completo_${monthName}_${year}.xlsx`);
+        showNotification(`Exportado a Excel con ${wb.SheetNames.length} hojas: resumen general, ${operators.length} operarios individuales y ${uniqueShifts.length} tipos de turno`, "success");
+        console.log("Excel export completed successfully");
+        
+    } catch (error) {
+        console.error("Excel export error:", error);
+        showNotification("Error al exportar a Excel: " + error.message, "error");
+    }
 }
 
 // Utility function to show notifications
@@ -1328,6 +1306,524 @@ function updateOperatorHours() {
             // Add tooltip with details
             hoursCell.title = `${operator.name}: ${operator.hours.toFixed(1)} horas\nPromedio: ${averageHours.toFixed(1)} horas`;
         }
+    });
+}
+
+// Update visual indicators for cells with multiple shifts
+function updateMultipleShiftsIndicators() {
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    
+    // Clear all multiple-shifts classes first
+    document.querySelectorAll('.calendar-cell').forEach(cell => {
+        cell.classList.remove('multiple-shifts');
+    });
+    
+    // Group events by cell to find multiple shifts
+    const cellEvents = {};
+    events.forEach(event => {
+        if (event.month === currentMonth && event.year === currentYear) {
+            const cellKey = `${event.operatorId}-${event.day}`;
+            if (!cellEvents[cellKey]) {
+                cellEvents[cellKey] = [];
+            }
+            cellEvents[cellKey].push(event);
+        }
+    });
+    
+    // Add visual indicator for cells with multiple shifts
+    Object.keys(cellEvents).forEach(cellKey => {
+        const [operatorId, day] = cellKey.split('-');
+        if (cellEvents[cellKey].length > 1) {
+            const cell = document.querySelector(`[data-cell-id="cell-${operatorId}-${day}"]`);
+            if (cell) {
+                cell.classList.add('multiple-shifts');
+            }
+        }
+    });
+}
+
+// Handle right-click on cells
+function handleCellRightClick(event) {
+    event.preventDefault();
+    
+    const cellId = event.currentTarget.dataset.cellId;
+    
+    // If right-clicking on a non-selected cell, select only that cell
+    if (!selectedCells.includes(event.currentTarget)) {
+        clearCellSelection();
+        selectedCells = [event.currentTarget];
+        event.currentTarget.classList.add('selected');
+        updateSelectionButtons();
+    }
+    
+    // Show context menu at mouse position
+    showContextMenu(event.pageX, event.pageY);
+}
+
+function copySelection() {
+    if (selectedCells.length === 0) return;
+    
+    clipboard = {
+        type: 'copy',
+        data: selectedCells.map(cell => {
+            const operatorId = cell.dataset.operatorId;
+            const day = parseInt(cell.dataset.day);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            return {
+                cellId: cell.dataset.cellId,
+                operatorId,
+                day,
+                events: events.filter(e => 
+                    e.operatorId === operatorId && 
+                    e.day === day && 
+                    e.month === month && 
+                    e.year === year
+                )
+            };
+        }),
+        originalSelection: [...selectedCells]
+    };
+    
+    showNotification(`${selectedCells.length} celdas copiadas`, "success");
+}
+
+function cutSelection() {
+    if (selectedCells.length === 0) return;
+    
+    clipboard = {
+        type: 'cut',
+        data: selectedCells.map(cell => {
+            const operatorId = cell.dataset.operatorId;
+            const day = parseInt(cell.dataset.day);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            return {
+                cellId: cell.dataset.cellId,
+                operatorId,
+                day,
+                events: events.filter(e => 
+                    e.operatorId === operatorId && 
+                    e.day === day && 
+                    e.month === month && 
+                    e.year === year
+                )
+            };
+        }),
+        originalSelection: [...selectedCells]
+    };
+    
+    showNotification(`${selectedCells.length} celdas cortadas`, "success");
+}
+
+function pasteSelection() {
+    if (!clipboard || selectedCells.length === 0) return;
+    
+    const targetStartCell = selectedCells[0];
+    const targetOperatorId = targetStartCell.dataset.operatorId;
+    const targetDay = parseInt(targetStartCell.dataset.day);
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    // Calculate offset from original position
+    const originalStartCell = clipboard.data[0];
+    const originalOperatorIndex = operators.findIndex(op => op.id === originalStartCell.operatorId);
+    const targetOperatorIndex = operators.findIndex(op => op.id === targetOperatorId);
+    
+    const dayOffset = targetDay - originalStartCell.day;
+    const operatorOffset = targetOperatorIndex - originalOperatorIndex;
+    
+    let pastedCount = 0;
+    
+    clipboard.data.forEach(cellData => {
+        const originalOperatorIndex = operators.findIndex(op => op.id === cellData.operatorId);
+        const newOperatorIndex = originalOperatorIndex + operatorOffset;
+        const newDay = cellData.day + dayOffset;
+        
+        // Check if target position is valid
+        if (newOperatorIndex >= 0 && newOperatorIndex < operators.length && newDay >= 1 && newDay <= 31) {
+            const newOperatorId = operators[newOperatorIndex].id;
+            
+            // Clear existing events in target cell first
+            events = events.filter(e => !(
+                e.operatorId === newOperatorId && 
+                e.day === newDay && 
+                e.month === month && 
+                e.year === year
+            ));
+            
+            // Add events to target position
+            cellData.events.forEach(event => {
+                const newEvent = {
+                    ...event,
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    operatorId: newOperatorId,
+                    day: newDay,
+                    month: month,
+                    year: year
+                };
+                events.push(newEvent);
+                pastedCount++;
+            });
+        }
+    });
+    
+    // If it was a cut operation, remove events from original locations
+    if (clipboard.type === 'cut') {
+        clipboard.data.forEach(cellData => {
+            cellData.events.forEach(event => {
+                events = events.filter(e => e.id !== event.id);
+            });
+        });
+        clipboard = null; // Clear clipboard after cut
+    }
+    
+    saveDataToStorage();
+    renderEvents();
+    updateOperatorHours();
+    showNotification(`${pastedCount} turnos pegados correctamente`, "success");
+}
+
+function deleteSelection() {
+    if (selectedCells.length === 0) return;
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    let deletedCount = 0;
+    
+    selectedCells.forEach(cell => {
+        const operatorId = cell.dataset.operatorId;
+        const day = parseInt(cell.dataset.day);
+        
+        const beforeCount = events.length;
+        events = events.filter(e => !(
+            e.operatorId === operatorId && 
+            e.day === day && 
+            e.month === month && 
+            e.year === year
+        ));
+        deletedCount += beforeCount - events.length;
+    });
+    
+    if (deletedCount > 0) {
+        saveDataToStorage();
+        renderEvents();
+        updateOperatorHours();
+        showNotification(`${deletedCount} turnos eliminados`, "success");
+    }
+}
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle shortcuts when not typing in input fields
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        if (e.ctrlKey && e.key === 'c') {
+            e.preventDefault();
+            copySelection();
+        } else if (e.ctrlKey && e.key === 'v') {
+            e.preventDefault();
+            pasteSelection();
+        } else if (e.key === 'Delete' || e.key === 'Supr') {
+            e.preventDefault();
+            deleteSelection();
+        } else if (e.ctrlKey && e.key === 'x') {
+            e.preventDefault();
+            cutSelection();
+        } else if (e.key === 'Escape') {
+            closeContextMenu();
+        }
+    });
+}
+
+// Setup context menu event listeners
+function setupContextMenu() {
+    // Context menu item event listeners
+    document.getElementById('cutMenuItem').addEventListener('click', () => {
+        cutSelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('copyMenuItem').addEventListener('click', () => {
+        copySelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('pasteMenuItem').addEventListener('click', () => {
+        pasteSelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('deleteMenuItem').addEventListener('click', () => {
+        deleteSelection();
+        closeContextMenu();
+    });
+}
+
+// Context menu functionality
+let contextMenu = null;
+
+function showContextMenu(x, y) {
+    if (!contextMenu) {
+        contextMenu = document.getElementById('contextMenu');
+    }
+    
+    // Update menu items based on current state
+    const cutItem = document.getElementById('cutMenuItem');
+    const copyItem = document.getElementById('copyMenuItem');
+    const pasteItem = document.getElementById('pasteMenuItem');
+    const deleteItem = document.getElementById('deleteMenuItem');
+    
+    // Enable/disable items based on selection and clipboard
+    const hasSelection = selectedCells.length > 0;
+    const hasClipboard = clipboard && (clipboard.type === 'copy' || clipboard.type === 'cut') && clipboard.data.length > 0;
+    
+    cutItem.disabled = !hasSelection;
+    copyItem.disabled = !hasSelection;
+    pasteItem.disabled = !hasClipboard;
+    deleteItem.disabled = !hasSelection;
+    
+    // Position and show menu
+    contextMenu.style.left = x + 'px';
+    contextMenu.style.top = y + 'px';
+    contextMenu.style.display = 'block';
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu, { once: true });
+    }, 10);
+}
+
+function closeContextMenu() {
+    if (contextMenu) {
+        contextMenu.style.display = 'none';
+    }
+}
+
+// Handle right-click on cells
+function handleCellRightClick(event) {
+    event.preventDefault();
+    
+    const cellId = event.currentTarget.dataset.cellId;
+    
+    // If right-clicking on a non-selected cell, select only that cell
+    if (!selectedCells.includes(event.currentTarget)) {
+        clearCellSelection();
+        selectedCells = [event.currentTarget];
+        event.currentTarget.classList.add('selected');
+        updateSelectionButtons();
+    }
+    
+    // Show context menu at mouse position
+    showContextMenu(event.pageX, event.pageY);
+}
+
+function copySelection() {
+    if (selectedCells.length === 0) return;
+    
+    clipboard = {
+        type: 'copy',
+        data: selectedCells.map(cell => {
+            const operatorId = cell.dataset.operatorId;
+            const day = parseInt(cell.dataset.day);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            return {
+                cellId: cell.dataset.cellId,
+                operatorId,
+                day,
+                events: events.filter(e => 
+                    e.operatorId === operatorId && 
+                    e.day === day && 
+                    e.month === month && 
+                    e.year === year
+                )
+            };
+        }),
+        originalSelection: [...selectedCells]
+    };
+    
+    showNotification(`${selectedCells.length} celdas copiadas`, "success");
+}
+
+function cutSelection() {
+    if (selectedCells.length === 0) return;
+    
+    clipboard = {
+        type: 'cut',
+        data: selectedCells.map(cell => {
+            const operatorId = cell.dataset.operatorId;
+            const day = parseInt(cell.dataset.day);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            return {
+                cellId: cell.dataset.cellId,
+                operatorId,
+                day,
+                events: events.filter(e => 
+                    e.operatorId === operatorId && 
+                    e.day === day && 
+                    e.month === month && 
+                    e.year === year
+                )
+            };
+        }),
+        originalSelection: [...selectedCells]
+    };
+    
+    showNotification(`${selectedCells.length} celdas cortadas`, "success");
+}
+
+function pasteSelection() {
+    if (!clipboard || selectedCells.length === 0) return;
+    
+    const targetStartCell = selectedCells[0];
+    const targetOperatorId = targetStartCell.dataset.operatorId;
+    const targetDay = parseInt(targetStartCell.dataset.day);
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    // Calculate offset from original position
+    const originalStartCell = clipboard.data[0];
+    const originalOperatorIndex = operators.findIndex(op => op.id === originalStartCell.operatorId);
+    const targetOperatorIndex = operators.findIndex(op => op.id === targetOperatorId);
+    
+    const dayOffset = targetDay - originalStartCell.day;
+    const operatorOffset = targetOperatorIndex - originalOperatorIndex;
+    
+    let pastedCount = 0;
+    
+    clipboard.data.forEach(cellData => {
+        const originalOperatorIndex = operators.findIndex(op => op.id === cellData.operatorId);
+        const newOperatorIndex = originalOperatorIndex + operatorOffset;
+        const newDay = cellData.day + dayOffset;
+        
+        // Check if target position is valid
+        if (newOperatorIndex >= 0 && newOperatorIndex < operators.length && newDay >= 1 && newDay <= 31) {
+            const newOperatorId = operators[newOperatorIndex].id;
+            
+            // Clear existing events in target cell first
+            events = events.filter(e => !(
+                e.operatorId === newOperatorId && 
+                e.day === newDay && 
+                e.month === month && 
+                e.year === year
+            ));
+            
+            // Add events to target position
+            cellData.events.forEach(event => {
+                const newEvent = {
+                    ...event,
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    operatorId: newOperatorId,
+                    day: newDay,
+                    month: month,
+                    year: year
+                };
+                events.push(newEvent);
+                pastedCount++;
+            });
+        }
+    });
+    
+    // If it was a cut operation, remove events from original locations
+    if (clipboard.type === 'cut') {
+        clipboard.data.forEach(cellData => {
+            cellData.events.forEach(event => {
+                events = events.filter(e => e.id !== event.id);
+            });
+        });
+        clipboard = null; // Clear clipboard after cut
+    }
+    
+    saveDataToStorage();
+    renderEvents();
+    updateOperatorHours();
+    showNotification(`${pastedCount} turnos pegados correctamente`, "success");
+}
+
+function deleteSelection() {
+    if (selectedCells.length === 0) return;
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    let deletedCount = 0;
+    
+    selectedCells.forEach(cell => {
+        const operatorId = cell.dataset.operatorId;
+        const day = parseInt(cell.dataset.day);
+        
+        const beforeCount = events.length;
+        events = events.filter(e => !(
+            e.operatorId === operatorId && 
+            e.day === day && 
+            e.month === month && 
+            e.year === year
+        ));
+        deletedCount += beforeCount - events.length;
+    });
+    
+    if (deletedCount > 0) {
+        saveDataToStorage();
+        renderEvents();
+        updateOperatorHours();
+        showNotification(`${deletedCount} turnos eliminados`, "success");
+    }
+}
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle shortcuts when not typing in input fields
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        if (e.ctrlKey && e.key === 'c') {
+            e.preventDefault();
+            copySelection();
+        } else if (e.ctrlKey && e.key === 'v') {
+            e.preventDefault();
+            pasteSelection();
+        } else if (e.key === 'Delete' || e.key === 'Supr') {
+            e.preventDefault();
+            deleteSelection();
+        } else if (e.ctrlKey && e.key === 'x') {
+            e.preventDefault();
+            cutSelection();
+        } else if (e.key === 'Escape') {
+            closeContextMenu();
+        }
+    });
+}
+
+// Setup context menu event listeners
+function setupContextMenu() {
+    // Context menu item event listeners
+    document.getElementById('cutMenuItem').addEventListener('click', () => {
+        cutSelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('copyMenuItem').addEventListener('click', () => {
+        copySelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('pasteMenuItem').addEventListener('click', () => {
+        pasteSelection();
+        closeContextMenu();
+    });
+    
+    document.getElementById('deleteMenuItem').addEventListener('click', () => {
+        deleteSelection();
+        closeContextMenu();
     });
 }
 

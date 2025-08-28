@@ -1530,12 +1530,26 @@ function menuPaste() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    let addedCount = 0;
+    // 1. Clear the destination area first (destructive paste)
+    for (let r = 0; r < clipboard.height; r++) {
+        for (let c = 0; c < clipboard.width; c++) {
+            const targetRow = startRow + r;
+            const targetCol = startCol + c;
+            const targetCell = document.querySelector(`.calendar-cell[data-row='${targetRow}'][data-col='${targetCol}']`);
 
+            if (targetCell) {
+                const day = parseInt(targetCell.dataset.day);
+                const operatorId = targetCell.dataset.operatorId;
+                events = events.filter(event => !(event.day === day && event.operatorId === operatorId));
+            }
+        }
+    }
+
+    // 2. Paste the new events
+    let addedCount = 0;
     clipboard.events.forEach(item => {
         const targetRow = startRow + item.rowOffset;
         const targetCol = startCol + item.colOffset;
-
         const targetCell = document.querySelector(`.calendar-cell[data-row='${targetRow}'][data-col='${targetCol}']`);
 
         if (targetCell) {
@@ -1552,12 +1566,11 @@ function menuPaste() {
         }
     });
 
-    if (addedCount > 0) {
-        saveDataToStorage();
-        renderEvents();
-        updateOperatorHours();
-        showNotification(`${addedCount} turno(s) pegado(s) correctamente.`, 'success');
-    }
+    // 3. Save and re-render
+    saveDataToStorage();
+    renderEvents();
+    updateOperatorHours();
+    showNotification(`${addedCount} turno(s) pegado(s) en el nuevo rango.`, 'success');
 }
 
 function menuDelete() {

@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Modal close button
     document.querySelector('.close-modal').addEventListener('click', closeModal);
+    document.getElementById('closeEmailModal').addEventListener('click', closeEmailModal);
     
     // Selection actions
     document.getElementById('copySelection').addEventListener('click', copySelectedCells);
@@ -60,11 +61,18 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Click outside modal to close
     window.addEventListener('click', function(e) {
-        const modal = document.getElementById('operatorModal');
-        if (e.target === modal) {
+        const operatorModal = document.getElementById('operatorModal');
+        const emailModal = document.getElementById('emailModal');
+        if (e.target === operatorModal) {
             closeModal();
         }
+        if (e.target === emailModal) {
+            closeEmailModal();
+        }
     });
+
+    // Email confirm button
+    document.getElementById('sendEmailConfirmBtn').addEventListener('click', handleSendEmail);
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -1323,20 +1331,152 @@ function showNotification(message, type = "info") {
 
 // Send email with schedule
 function sendEmailSchedule() {
-    const emailInput = document.getElementById('emailInput').value.trim();
+    const emailModal = document.getElementById('emailModal');
+    const operatorSelect = document.getElementById('operatorSelect');
     
-    if (!emailInput || !validateEmail(emailInput)) {
-        showNotification("Por favor introduce un email válido", "error");
+    // Filter operators who have an email
+    const operatorsWithEmail = operators.filter(op => op.email && op.email.trim() !== '');
+
+    if (operatorsWithEmail.length === 0) {
+        showNotification("No hay operarios con emails registrados.", "warning");
         return;
     }
     
-    document.getElementById('emailStatus').textContent = "Enviando email...";
+    // Populate dropdown
+    operatorSelect.innerHTML = '';
+    operatorsWithEmail.forEach(op => {
+        const option = document.createElement('option');
+        option.value = op.id;
+        option.textContent = op.name;
+        operatorSelect.appendChild(option);
+    });
     
-    // Simulate email sending
-    setTimeout(() => {
-        document.getElementById('emailStatus').textContent = "Email enviado correctamente";
-        showNotification(`Cuadrantes enviados a ${emailInput}`, "success");
-    }, 2000);
+    emailModal.style.display = 'block';
+}
+
+function closeEmailModal() {
+    const emailModal = document.getElementById('emailModal');
+    emailModal.style.display = 'none';
+}
+
+function handleSendEmail() {
+    const operatorSelect = document.getElementById('operatorSelect');
+    const operatorId = operatorSelect.value;
+    const operator = operators.find(op => op.id === operatorId);
+
+    if (!operator || !operator.email) {
+        showNotification("Operario no válido o sin email.", "error");
+        return;
+    }
+
+    const monthName = document.getElementById('currentMonth').textContent;
+    const subject = `Cuadrante de ${monthName}`;
+    const body = generateHtmlScheduleForOperator(operatorId);
+
+    const mailtoLink = `mailto:${operator.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    // Use window.open to be more robust
+    const emailWindow = window.open(mailtoLink, '_blank');
+    if (!emailWindow) {
+        // If popup was blocked, fall back to changing location
+        window.location.href = mailtoLink;
+    }
+
+
+    closeEmailModal();
+    showNotification(`Preparando email para ${operator.name}...`, "success");
+}
+
+function generateHtmlScheduleForOperator(operatorId) {
+    const operator = operators.find(op => op.id === operatorId);
+    if (!operator) return "";
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    let totalHours = 0;
+    let schedule = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
+
+        const dayEvents = events.filter(event =>
+            event.operatorId === operator.id && event.day === day &&
+            event.month === month && event.year === year
+        );
+
+        if (dayEvents.length > 0) {
+            dayEvents.forEach(event => {
+                const startHour = parseInt(event.startTime.split(':')[0]);
+                const startMinute = parseInt(event.startTime.split(':')[1]);
+                const endHour = parseInt(event.endTime.split(':')[0]);
+                const endMinute = parseInt(event.endTime.split(':')[1]);
+
+                let shiftHours = (endHour + endMinute/60) - (startHour + startMinute/60);
+                if (shiftHours < 0) shiftHours += 24;
+                totalHours += shiftHours;
+
+                schedule.push({
+                    day: `${day} (${dayName})`,
+                    shift: event.title,
+                    time: `${event.startTime} - ${event.endTime}`,
+                    hours: shiftHours.toFixed(1)
+                });
+            });
+        } else {
+            schedule.push({ day: `${day} (${dayName})`, shift: "Libre", time: "-", hours: "0" });
+        }
+    }
+
+    // Basic styling for the HTML email
+    const styles = `
+        <style>
+            body { font-family: sans-serif; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+            th { background-color: #f2f2f2; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            h2, h3 { color: #333; }
+        </style>
+    `;
+
+    const tableBody = schedule.map(row => `
+        <tr>
+            <td>${row.day}</td>
+            <td>${row.shift}</td>
+            <td>${row.time}</td>
+            <td>${row.hours}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+        <html>
+            <head>${styles}</head>
+            <body>
+                <h2>Cuadrante Individual para ${operator.name}</h2>
+                <h3>Mes: ${monthName}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Día</th>
+                            <th>Turno</th>
+                            <th>Horario</th>
+                            <th>Horas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+                <h3>Total de Horas: ${totalHours.toFixed(1)}</h3>
+            </body>
+        </html>
+    `;
+
+    return html;
 }
 
 // Calculate total hours for an operator in current month

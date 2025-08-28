@@ -8,8 +8,13 @@ let editingConfigId = null;
 let selectedCells = [];
 let draggingEvent = null;
 let colorPickr;
-let tempCopyEvents = [];
+let clipboard = {
+    events: [],
+    width: 0,
+    height: 0
+};
 let currentOperatorId = null; // For editing operator
+let contextCell = null; // Celda para el menú contextual
 
 // Inicializar la aplicación
 document.addEventListener('DOMContentLoaded', function() {
@@ -19,6 +24,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generar calendario inicial
     generateCalendar();
     initColorPicker();
+
+    // Init context menu
+    initContextMenu();
     
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
@@ -183,7 +191,7 @@ function generateCalendar() {
     calendarGrid.appendChild(hoursHeader);
     
     // Filas para cada operario
-    operators.forEach(operator => {
+    operators.forEach((operator, rowIndex) => {
         // Encabezado del operario
         const operatorHeader = document.createElement('div');
         operatorHeader.className = 'operator-header';
@@ -203,6 +211,8 @@ function generateCalendar() {
             if (isWeekend) cell.classList.add('weekend');
             cell.dataset.day = day;
             cell.dataset.operatorId = operator.id;
+            cell.dataset.row = rowIndex;
+            cell.dataset.col = day - 1;
             cell.dataset.cellId = `cell-${operator.id}-${day}`;
             
             // Contenedor para eventos
@@ -213,13 +223,12 @@ function generateCalendar() {
             
             // Event listeners for cells
             cell.addEventListener('click', handleCellClick);
+            cell.addEventListener('contextmenu', showContextMenu);
             cell.addEventListener('dragover', handleDragOver);
             cell.addEventListener('dragleave', handleDragLeave);
             cell.addEventListener('drop', handleDrop);
             
-            // Mouse events for multi-select
-            cell.addEventListener('mousedown', startCellSelection);
-            cell.addEventListener('mouseover', continueCellSelection);
+            // Mouse events for multi-select are now handled by the grid container
             
             calendarGrid.appendChild(cell);
         }
@@ -240,15 +249,24 @@ function generateCalendar() {
     // Reset selection
     selectedCells = [];
     updateSelectionButtons();
+
+    // Add grid-level listeners for rectangular selection
+    calendarGrid.addEventListener('mousedown', startRectangularSelection);
 }
 
 
 // Handle cell click (single click)
 function handleCellClick(e) {
+    // If shift is pressed, let the rectangular selection handle it.
+    if (e.shiftKey) return;
+
     if (e.ctrlKey || e.metaKey) {
         // Toggle cell selection with Ctrl/Cmd key
         toggleCellSelection(this);
     } else if (activeConfig) {
+        // Clear previous selections if not using modifier keys
+        clearCellSelection();
+
         // Add event with active config
         const day = this.dataset.day;
         const operatorId = this.dataset.operatorId;
@@ -286,35 +304,63 @@ function handleCellClick(e) {
 let isSelecting = false;
 let selectionStartCell = null;
 
-function startCellSelection(e) {
-    // Only start selection with Shift key
+function startRectangularSelection(e) {
     if (!e.shiftKey) return;
     
+    const cell = e.target.closest('.calendar-cell');
+    if (!cell) return;
+
     e.preventDefault();
     isSelecting = true;
-    selectionStartCell = this;
-    selectedCells = [this];
-    this.classList.add('selected');
+    selectionStartCell = cell;
+
+    document.addEventListener('mousemove', handleRectangularSelection);
+    document.addEventListener('mouseup', stopRectangularSelection, { once: true });
+
+    updateRectangleSelection(cell);
+}
+
+function handleRectangularSelection(e) {
+    if (!isSelecting) return;
+    
+    const cell = e.target.closest('.calendar-cell');
+    if (!cell) return;
+
+    updateRectangleSelection(cell);
+}
+
+function stopRectangularSelection() {
+    isSelecting = false;
+    document.removeEventListener('mousemove', handleRectangularSelection);
+
+    // Finalize selected cells array
+    selectedCells = Array.from(document.querySelectorAll('.calendar-cell.selected'));
     updateSelectionButtons();
 }
 
-function continueCellSelection(e) {
-    if (!isSelecting) return;
-    
-    if (!selectedCells.includes(this)) {
-        selectedCells.push(this);
-        this.classList.add('selected');
-        updateSelectionButtons();
-    }
-}
+function updateRectangleSelection(endCell) {
+    // Clear previous selection
+    document.querySelectorAll('.calendar-cell.selected').forEach(c => c.classList.remove('selected'));
 
-function stopCellSelection() {
-    isSelecting = false;
-    selectionStartCell = null;
-}
+    const startRow = parseInt(selectionStartCell.dataset.row);
+    const startCol = parseInt(selectionStartCell.dataset.col);
+    const endRow = parseInt(endCell.dataset.row);
+    const endCol = parseInt(endCell.dataset.col);
 
-// Add event listener to stop selection
-document.addEventListener('mouseup', stopCellSelection);
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+
+    const allCells = document.querySelectorAll('.calendar-cell');
+    allCells.forEach(cell => {
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+        if (row >= minRow && row <= maxRow && col >= minCol && col <= maxCol) {
+            cell.classList.add('selected');
+        }
+    });
+}
 
 function toggleCellSelection(cell) {
     const index = selectedCells.indexOf(cell);
@@ -799,15 +845,6 @@ function renderEvents() {
                     <small>${event.startTime} - ${event.endTime}</small>
                 `;
                 eventElement.dataset.id = event.id;
-                
-                // Right-click for delete
-                eventElement.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirm(`¿Eliminar turno "${event.title}"?`)) {
-                        removeEvent(event.id);
-                    }
-                });
                 
                 cellContainer.appendChild(eventElement);
             }
@@ -1332,6 +1369,219 @@ function updateOperatorHours() {
 }
 
 // Initialize the app when the DOM is ready
+
+// --- CONTEXT MENU FUNCTIONS ---
+
+function initContextMenu() {
+    const contextMenu = document.getElementById('customContextMenu');
+
+    // Hide menu if clicked outside
+    window.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
+
+    // Handle actions
+    contextMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (action) {
+            handleContextMenuAction(action);
+            hideContextMenu();
+        }
+    });
+}
+
+function hideContextMenu() {
+    const contextMenu = document.getElementById('customContextMenu');
+    contextMenu.style.display = 'none';
+    contextCell = null;
+}
+
+function showContextMenu(e) {
+    e.preventDefault();
+
+    const clickedCell = e.target.closest('.calendar-cell');
+    if (!clickedCell) return;
+
+    // If the clicked cell is NOT part of an existing selection,
+    // clear the old selection and make this cell the new selection.
+    if (!selectedCells.includes(clickedCell)) {
+        clearCellSelection();
+        clickedCell.classList.add('selected');
+        selectedCells = [clickedCell];
+    }
+
+    // The context menu now ALWAYS acts on the current selection (selectedCells array).
+    contextCell = clickedCell; // Still useful for paste destination
+
+    const contextMenu = document.getElementById('customContextMenu');
+
+    // Enable/disable options based on whether ANY selected cell has events
+    const eventsInSelection = selectedCells.some(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+        return events.some(event => event.day === day && event.operatorId === operatorId);
+    });
+
+    const copyItem = contextMenu.querySelector('[data-action="copy"]');
+    const cutItem = contextMenu.querySelector('[data-action="cut"]');
+    const deleteItem = contextMenu.querySelector('[data-action="delete"]');
+    const pasteItem = contextMenu.querySelector('[data-action="paste"]');
+
+    if (!eventsInSelection) {
+        copyItem.classList.add('disabled');
+        cutItem.classList.add('disabled');
+        deleteItem.classList.add('disabled');
+    } else {
+        copyItem.classList.remove('disabled');
+        cutItem.classList.remove('disabled');
+        deleteItem.classList.remove('disabled');
+    }
+
+    if (clipboard.events.length === 0) {
+        pasteItem.classList.add('disabled');
+    } else {
+        pasteItem.classList.remove('disabled');
+    }
+
+    // Position and show menu
+    contextMenu.style.left = `${e.clientX}px`;
+    contextMenu.style.top = `${e.clientY}px`;
+    contextMenu.style.display = 'block';
+}
+
+function handleContextMenuAction(action) {
+    if (!contextCell) return;
+
+    switch (action) {
+        case 'copy':
+            menuCopy();
+            break;
+        case 'cut':
+            menuCut();
+            break;
+        case 'paste':
+            menuPaste();
+            break;
+        case 'delete':
+            menuDelete();
+            break;
+    }
+}
+
+function menuCopy() {
+    if (selectedCells.length === 0) return;
+
+    const rows = selectedCells.map(c => parseInt(c.dataset.row));
+    const cols = selectedCells.map(c => parseInt(c.dataset.col));
+
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    const minCol = Math.min(...cols);
+    const maxCol = Math.max(...cols);
+
+    clipboard.width = maxCol - minCol + 1;
+    clipboard.height = maxRow - minRow + 1;
+    clipboard.events = [];
+
+    selectedCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+        const cellEvents = events.filter(event => event.day === day && event.operatorId === operatorId);
+
+        if (cellEvents.length > 0) {
+            const rowOffset = parseInt(cell.dataset.row) - minRow;
+            const colOffset = parseInt(cell.dataset.col) - minCol;
+
+            cellEvents.forEach(event => {
+                clipboard.events.push({
+                    event: JSON.parse(JSON.stringify(event)), // Deep copy
+                    rowOffset,
+                    colOffset
+                });
+            });
+        }
+    });
+
+    if (clipboard.events.length > 0) {
+        showNotification(`${clipboard.events.length} turno(s) copiado(s) de un bloque de ${clipboard.width}x${clipboard.height}.`, 'success');
+    } else {
+        showNotification('No hay turnos para copiar en la selección.', 'warning');
+    }
+}
+
+function menuCut() {
+    menuCopy(); // This now populates the new clipboard structure
+    if (clipboard.events.length > 0) {
+        menuDelete(); // This deletes from the original selection
+        showNotification(`${clipboard.events.length} turno(s) cortado(s).`, 'success');
+    }
+}
+
+function menuPaste() {
+    if (clipboard.events.length === 0) {
+        showNotification('No hay nada que pegar en el portapapeles.', 'warning');
+        return;
+    }
+
+    const startRow = parseInt(contextCell.dataset.row);
+    const startCol = parseInt(contextCell.dataset.col);
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    let addedCount = 0;
+
+    clipboard.events.forEach(item => {
+        const targetRow = startRow + item.rowOffset;
+        const targetCol = startCol + item.colOffset;
+
+        const targetCell = document.querySelector(`.calendar-cell[data-row='${targetRow}'][data-col='${targetCol}']`);
+
+        if (targetCell) {
+            const newEvent = {
+                ...item.event,
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+                day: parseInt(targetCell.dataset.day),
+                operatorId: targetCell.dataset.operatorId,
+                month: month,
+                year: year
+            };
+            events.push(newEvent);
+            addedCount++;
+        }
+    });
+
+    if (addedCount > 0) {
+        saveDataToStorage();
+        renderEvents();
+        updateOperatorHours();
+        showNotification(`${addedCount} turno(s) pegado(s) correctamente.`, 'success');
+    }
+}
+
+function menuDelete() {
+    if (selectedCells.length === 0) return;
+
+    let deletedCount = 0;
+    selectedCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+
+        const initialCount = events.length;
+        events = events.filter(event => !(event.day === day && event.operatorId === operatorId));
+        deletedCount += initialCount - events.length;
+    });
+
+    if (deletedCount > 0) {
+        saveDataToStorage();
+        renderEvents();
+        updateOperatorHours();
+        showNotification(`${deletedCount} turno(s) eliminado(s) de ${selectedCells.length} celdas.`, 'success');
+    }
+    clearCellSelection();
+}
+
 
 // Edit configuration
 function editConfig(configId) {

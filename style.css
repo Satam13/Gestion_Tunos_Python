@@ -554,3 +554,46 @@ button:hover {
         flex-direction: column;
     }
 }
+
+/* Custom Context Menu */
+.context-menu {
+    display: none;
+    position: absolute;
+    z-index: 1000;
+    background: rgba(40, 50, 60, 0.95);
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 0;
+}
+
+.context-menu-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.context-menu-item {
+    padding: 10px 20px;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.context-menu-item:hover {
+    background-color: rgba(33, 147, 176, 0.5);
+}
+
+.context-menu-item.disabled {
+    color: rgba(255, 255, 255, 0.4);
+    cursor: not-allowed;
+    background-color: transparent;
+}
+
+.context-menu-separator {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.15);
+    margin: 5px 0;
+}

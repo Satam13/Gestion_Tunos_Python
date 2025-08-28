@@ -637,22 +637,44 @@ function handleDrop(e) {
     this.classList.remove('drag-over');
     
     if (!draggingEvent) return;
-    
-    const eventId = e.dataTransfer.getData('text/plain');
-    const targetDay = parseInt(this.dataset.day);
-    const targetOperatorId = this.dataset.operatorId;
-    
-    // Update event with new position
-    const eventIndex = events.findIndex(event => event.id === eventId);
-    if (eventIndex !== -1) {
-        events[eventIndex].day = targetDay;
-        events[eventIndex].operatorId = targetOperatorId;
-        // Month and year stay the same to prevent shifts from moving between months
-        
-        saveDataToStorage();
-        renderEvents();
-        showNotification("Turno movido correctamente", "success");
+
+    const targetCell = this;
+    const targetDay = parseInt(targetCell.dataset.day);
+    const targetOperatorId = targetCell.dataset.operatorId;
+
+    const draggedEvent = draggingEvent; // draggingEvent is global
+    const sourceDay = draggedEvent.day;
+    const sourceOperatorId = draggedEvent.operatorId;
+
+    // Find events in the target cell
+    const targetEvents = events.filter(event =>
+        event.day === targetDay && event.operatorId === targetOperatorId
+    );
+
+    // Case 1: Target cell is empty -> Just move the event
+    if (targetEvents.length === 0) {
+        draggedEvent.day = targetDay;
+        draggedEvent.operatorId = targetOperatorId;
+        showNotification("Turno movido correctamente.", "success");
     }
+    // Case 2: Target cell is occupied -> Swap the events
+    else {
+        // Move the dragged event to the target cell
+        draggedEvent.day = targetDay;
+        draggedEvent.operatorId = targetOperatorId;
+
+        // Move the events from the target cell to the source cell
+        targetEvents.forEach(event => {
+            event.day = sourceDay;
+            event.operatorId = sourceOperatorId;
+        });
+        showNotification("Turnos intercambiados.", "success");
+    }
+
+    // Save, re-render, and finish
+    saveDataToStorage();
+    renderEvents();
+    draggingEvent = null; // Clear the dragging event
 }
 
 function handleDragEnd() {

@@ -8,7 +8,7 @@
 body {
     background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
     min-height: 100vh;
-    padding: 20px;
+    padding: 10px;
     color: white;
     overflow-x: hidden;
 }
@@ -22,14 +22,20 @@ header {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 0;
-    margin-bottom: 20px;
+    padding: 10px 0;
+    margin-bottom: 10px;
     text-align: center;
 }
 
 .logo {
     max-height: 120px;
     margin-bottom: 15px;
+}
+
+.month-header .logo {
+    max-height: 116px;
+    margin-bottom: 0;
+    flex-shrink: 0;
 }
 
 h1 {
@@ -52,9 +58,19 @@ h1 {
     align-items: center;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 15px;
-    padding: 15px 25px;
+    padding: 10px 25px;
     margin-bottom: 20px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.month-header .month-title,
+.month-header .month-nav {
+    flex: 1;
+}
+
+.month-header .month-nav {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .month-title {
@@ -79,15 +95,24 @@ h1 {
     background: rgba(255, 255, 255, 0.25);
 }
 
+#toggleSidebarBtn {
+    background: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+    font-size: 1.2rem;
+    padding: 8px 12px;
+}
+
 .main-content {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* Prevent wrapping */
     gap: 30px;
     margin-bottom: 30px;
+    transition: gap 0.5s ease;
 }
 
 .calendar-container {
     flex: 1;
+    transition: all 0.5s ease;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 15px;
     padding: 20px;
@@ -282,6 +307,7 @@ h1 {
 
 .controls {
     flex: 0 0 350px;
+    transition: all 0.5s ease;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 15px;
     padding: 25px;
@@ -625,4 +651,62 @@ footer a {
 footer a:hover {
     color: white;
     text-decoration: underline;
+}
+
+/* Draft Management Styles */
+.drafts-panel {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.drafts-panel h4 {
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.draft-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s ease;
+}
+
+.draft-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.draft-item span {
+    font-weight: 500;
+}
+
+.draft-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.load-draft-btn {
+    background: rgba(76, 201, 240, 0.7); /* A light blue */
+}
+
+.load-draft-btn:hover {
+    background: rgba(76, 201, 240, 0.9);
+}
+
+/* Sidebar Toggle Styles */
+.main-content.sidebar-hidden {
+    gap: 0;
+}
+
+.main-content.sidebar-hidden .controls {
+    flex-basis: 0;
+    width: 0;
+    padding: 0;
+    border-width: 0;
+    opacity: 0;
 }

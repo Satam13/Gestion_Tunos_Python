@@ -14,16 +14,17 @@
 <body>
     <div class="container">
         <header>
-            <img src="logotipo.png" alt="Logotipo" class="logo">
-            <h1>Cuadrantes de Turnos</h1>
+            <h1>GESTION DE TURNOS</h1>
             <p class="subtitle">Sistema de gestión de turnos con colores personalizados, gestión de operarios y exportación a Excel</p>
         </header>
 
         <div class="month-header">
             <h2 class="month-title" id="currentMonth">Mes Actual</h2>
+            <img src="logotipo.png" alt="Logotipo" class="logo">
             <div class="month-nav">
                 <button id="prevMonth">&laquo; Mes Anterior</button>
                 <button id="nextMonth">Mes Siguiente &raquo;</button>
+                <button id="toggleSidebarBtn" title="Ocultar/Mostrar Panel">&#x2194;</button>
             </div>
         </div>
 
@@ -86,6 +87,12 @@
                     <div id="operatorsList">
                         <!-- Operators will appear here -->
                     </div>
+                </div>
+
+                <!-- Draft management -->
+                <div class="drafts-panel">
+                    <h4>Gestión de Borradores</h4>
+                    <button id="manageDraftsBtn">Abrir Gestor de Borradores</button>
                 </div>
                 
                 <!-- Export options -->
@@ -154,6 +161,27 @@
     <footer>
         Creado por M. Aranda | <a href="mailto:manuelarandazamora@gmail.com">manuelarandazamora@gmail.com</a>
     </footer>
+
+    <!-- Drafts Modal -->
+    <div id="draftsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="closeDraftsModal">&times;</span>
+            <h3>Gestión de Borradores</h3>
+
+            <div class="form-group">
+                <label for="draftName">Nombre del Borrador:</label>
+                <input type="text" id="draftName" placeholder="Ej: Borrador Semana 1">
+                <button id="saveDraftBtn" style="margin-top: 10px;">Guardar Borrador Actual</button>
+            </div>
+
+            <div class="drafts-list-container" style="margin-top: 20px;">
+                <h4>Borradores Guardados</h4>
+                <div id="draftsList" style="margin-top: 10px;">
+                    <!-- Drafts will be listed here -->
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

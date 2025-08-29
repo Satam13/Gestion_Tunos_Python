@@ -14,9 +14,9 @@
 <body>
     <div class="container">
         <header>
-            <h1>GESTOR DE TURNOS</h1>
-            <p class="subtitle">Sistema de gestión de turnos con colores personalizados, gestión de operarios y exportación a Excel</p>
             <img src="logotipo.png" alt="Logotipo" class="logo">
+            <h1>Cuadrantes de Turnos</h1>
+            <p class="subtitle">Sistema de gestión de turnos con colores personalizados, gestión de operarios y exportación a Excel</p>
         </header>
 
         <div class="month-header">
@@ -126,6 +126,34 @@
             <button id="saveOperatorBtn">Guardar</button>
         </div>
     </div>
+
+    <!-- Custom context menu -->
+    <div id="customContextMenu" class="context-menu">
+        <ul class="context-menu-items">
+            <li class="context-menu-item" data-action="cut">Cortar</li>
+            <li class="context-menu-item" data-action="copy">Copiar</li>
+            <li class="context-menu-item" data-action="paste">Pegar</li>
+            <li class="context-menu-separator"></li>
+            <li class="context-menu-item" data-action="delete">Eliminar</li>
+        </ul>
+    </div>
+
+    <!-- Email modal -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="closeEmailModal">&times;</span>
+            <h3>Enviar Cuadrante Individual</h3>
+            <div class="form-group">
+                <label for="operatorSelect">Selecciona un operario:</label>
+                <select id="operatorSelect"></select>
+            </div>
+            <button id="sendEmailConfirmBtn">Generar Email</button>
+        </div>
+    </div>
+
+    <footer>
+        Creado por M. Aranda | <a href="mailto:manuelarandazamora@gmail.com">manuelarandazamora@gmail.com</a>
+    </footer>
 
     <script src="script.js"></script>
 </body>

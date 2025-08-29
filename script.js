@@ -8,8 +8,13 @@ let editingConfigId = null;
 let selectedCells = [];
 let draggingEvent = null;
 let colorPickr;
-let tempCopyEvents = [];
+let clipboard = {
+    events: [],
+    width: 0,
+    height: 0
+};
 let currentOperatorId = null; // For editing operator
+let contextCell = null; // Celda para el menú contextual
 
 // Inicializar la aplicación
 document.addEventListener('DOMContentLoaded', function() {
@@ -19,10 +24,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generar calendario inicial
     generateCalendar();
     initColorPicker();
-    
-    // Setup new functionality
-    setupKeyboardShortcuts();
-    setupContextMenu();
+
+    // Init context menu
+    initContextMenu();
     
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
@@ -43,6 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Modal close button
     document.querySelector('.close-modal').addEventListener('click', closeModal);
+    document.getElementById('closeEmailModal').addEventListener('click', closeEmailModal);
     
     // Selection actions
     document.getElementById('copySelection').addEventListener('click', copySelectedCells);
@@ -56,11 +61,18 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Click outside modal to close
     window.addEventListener('click', function(e) {
-        const modal = document.getElementById('operatorModal');
-        if (e.target === modal) {
+        const operatorModal = document.getElementById('operatorModal');
+        const emailModal = document.getElementById('emailModal');
+        if (e.target === operatorModal) {
             closeModal();
         }
+        if (e.target === emailModal) {
+            closeEmailModal();
+        }
     });
+
+    // Email confirm button
+    document.getElementById('sendEmailConfirmBtn').addEventListener('click', handleSendEmail);
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -187,7 +199,7 @@ function generateCalendar() {
     calendarGrid.appendChild(hoursHeader);
     
     // Filas para cada operario
-    operators.forEach(operator => {
+    operators.forEach((operator, rowIndex) => {
         // Encabezado del operario
         const operatorHeader = document.createElement('div');
         operatorHeader.className = 'operator-header';
@@ -207,6 +219,8 @@ function generateCalendar() {
             if (isWeekend) cell.classList.add('weekend');
             cell.dataset.day = day;
             cell.dataset.operatorId = operator.id;
+            cell.dataset.row = rowIndex;
+            cell.dataset.col = day - 1;
             cell.dataset.cellId = `cell-${operator.id}-${day}`;
             
             // Contenedor para eventos
@@ -217,14 +231,12 @@ function generateCalendar() {
             
             // Event listeners for cells
             cell.addEventListener('click', handleCellClick);
+            cell.addEventListener('contextmenu', showContextMenu);
             cell.addEventListener('dragover', handleDragOver);
             cell.addEventListener('dragleave', handleDragLeave);
             cell.addEventListener('drop', handleDrop);
-            cell.addEventListener('contextmenu', handleCellRightClick);
             
-            // Mouse events for multi-select
-            cell.addEventListener('mousedown', startCellSelection);
-            cell.addEventListener('mouseover', continueCellSelection);
+            // Mouse events for multi-select are now handled by the grid container
             
             calendarGrid.appendChild(cell);
         }
@@ -245,15 +257,24 @@ function generateCalendar() {
     // Reset selection
     selectedCells = [];
     updateSelectionButtons();
+
+    // Add grid-level listeners for rectangular selection
+    calendarGrid.addEventListener('mousedown', startRectangularSelection);
 }
 
 
 // Handle cell click (single click)
 function handleCellClick(e) {
+    // If shift is pressed, let the rectangular selection handle it.
+    if (e.shiftKey) return;
+
     if (e.ctrlKey || e.metaKey) {
         // Toggle cell selection with Ctrl/Cmd key
         toggleCellSelection(this);
     } else if (activeConfig) {
+        // Clear previous selections if not using modifier keys
+        clearCellSelection();
+
         // Add event with active config
         const day = this.dataset.day;
         const operatorId = this.dataset.operatorId;
@@ -290,39 +311,64 @@ function handleCellClick(e) {
 // Selection functionality
 let isSelecting = false;
 let selectionStartCell = null;
-let copiedCells = [];
-let cutCells = [];
-let clipboard = null;
 
-function startCellSelection(e) {
-    // Only start selection with Shift key
+function startRectangularSelection(e) {
     if (!e.shiftKey) return;
     
+    const cell = e.target.closest('.calendar-cell');
+    if (!cell) return;
+
     e.preventDefault();
     isSelecting = true;
-    selectionStartCell = this;
-    selectedCells = [this];
-    this.classList.add('selected');
+    selectionStartCell = cell;
+
+    document.addEventListener('mousemove', handleRectangularSelection);
+    document.addEventListener('mouseup', stopRectangularSelection, { once: true });
+
+    updateRectangleSelection(cell);
+}
+
+function handleRectangularSelection(e) {
+    if (!isSelecting) return;
+    
+    const cell = e.target.closest('.calendar-cell');
+    if (!cell) return;
+
+    updateRectangleSelection(cell);
+}
+
+function stopRectangularSelection() {
+    isSelecting = false;
+    document.removeEventListener('mousemove', handleRectangularSelection);
+    
+    // Finalize selected cells array
+    selectedCells = Array.from(document.querySelectorAll('.calendar-cell.selected'));
     updateSelectionButtons();
 }
 
-function continueCellSelection(e) {
-    if (!isSelecting) return;
-    
-    if (!selectedCells.includes(this)) {
-        selectedCells.push(this);
-        this.classList.add('selected');
-        updateSelectionButtons();
-    }
-}
+function updateRectangleSelection(endCell) {
+    // Clear previous selection
+    document.querySelectorAll('.calendar-cell.selected').forEach(c => c.classList.remove('selected'));
 
-function stopCellSelection() {
-    isSelecting = false;
-    selectionStartCell = null;
-}
+    const startRow = parseInt(selectionStartCell.dataset.row);
+    const startCol = parseInt(selectionStartCell.dataset.col);
+    const endRow = parseInt(endCell.dataset.row);
+    const endCol = parseInt(endCell.dataset.col);
 
-// Add event listener to stop selection
-document.addEventListener('mouseup', stopCellSelection);
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+
+    const allCells = document.querySelectorAll('.calendar-cell');
+    allCells.forEach(cell => {
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+        if (row >= minRow && row <= maxRow && col >= minCol && col <= maxCol) {
+            cell.classList.add('selected');
+        }
+    });
+}
 
 function toggleCellSelection(cell) {
     const index = selectedCells.indexOf(cell);
@@ -348,9 +394,38 @@ function updateSelectionButtons() {
     deleteBtn.disabled = selectedCells.length === 0;
 }
 
-// Updated to use new Excel-like functionality
 function copySelectedCells() {
-    copySelection();
+    if (selectedCells.length === 0) return;
+    
+    tempCopyEvents = [];
+    
+    // Get all events in selected cells
+    selectedCells.forEach(cell => {
+        const cellId = cell.dataset.cellId;
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+        
+        const cellEvents = events.filter(event => 
+            event.day === day && event.operatorId === operatorId
+        );
+        
+        tempCopyEvents.push(...cellEvents);
+    });
+    
+    if (tempCopyEvents.length > 0) {
+        showNotification(`${tempCopyEvents.length} turnos copiados. Haga clic en una celda para pegar.`, "success");
+        
+        // Change cursor to indicate copy mode
+        document.body.style.cursor = 'copy';
+        
+        // Add one-time click listener to paste
+        document.addEventListener('click', pasteEvents, { once: true });
+    } else {
+        showNotification("No hay turnos para copiar en las celdas seleccionadas", "warning");
+    }
+    
+    // Clear selection
+    clearCellSelection();
 }
 
 
@@ -416,14 +491,37 @@ function clearCellSelection() {
 }
 
 function moveSelectedCells() {
-    if (selectedCells.length === 0) {
-        showNotification("Selecciona las celdas para mover", "warning");
-        return;
+    if (selectedCells.length === 0) return;
+    
+    tempCopyEvents = [];
+    
+    // Get all events in selected cells
+    selectedCells.forEach(cell => {
+        const cellId = cell.dataset.cellId;
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+        
+        const cellEvents = events.filter(event => 
+            event.day === day && event.operatorId === operatorId
+        );
+        
+        tempCopyEvents.push(...cellEvents.map(e => ({ ...e, originalId: e.id })));
+    });
+    
+    if (tempCopyEvents.length > 0) {
+        showNotification(`${tempCopyEvents.length} turnos listos para mover. Haga clic en una celda destino.`, "success");
+        
+        // Change cursor to indicate move mode
+        document.body.style.cursor = 'move';
+        
+        // Add one-time click listener to paste and delete originals
+        document.addEventListener('click', moveEvents, { once: true });
+    } else {
+        showNotification("No hay turnos para mover en las celdas seleccionadas", "warning");
     }
     
-    // Use the new cut functionality
-    cutSelection();
-    showNotification("Celdas cortadas. Selecciona destino y pega (Ctrl+V)", "info");
+    // Clear selection
+    clearCellSelection();
 }
 
 function moveEvents(e) {
@@ -547,22 +645,44 @@ function handleDrop(e) {
     this.classList.remove('drag-over');
     
     if (!draggingEvent) return;
-    
-    const eventId = e.dataTransfer.getData('text/plain');
-    const targetDay = parseInt(this.dataset.day);
-    const targetOperatorId = this.dataset.operatorId;
-    
-    // Update event with new position
-    const eventIndex = events.findIndex(event => event.id === eventId);
-    if (eventIndex !== -1) {
-        events[eventIndex].day = targetDay;
-        events[eventIndex].operatorId = targetOperatorId;
-        // Month and year stay the same to prevent shifts from moving between months
-        
-        saveDataToStorage();
-        renderEvents();
-        showNotification("Turno movido correctamente", "success");
+
+    const targetCell = this;
+    const targetDay = parseInt(targetCell.dataset.day);
+    const targetOperatorId = targetCell.dataset.operatorId;
+
+    const draggedEvent = draggingEvent; // draggingEvent is global
+    const sourceDay = draggedEvent.day;
+    const sourceOperatorId = draggedEvent.operatorId;
+
+    // Find events in the target cell
+    const targetEvents = events.filter(event => 
+        event.day === targetDay && event.operatorId === targetOperatorId
+    );
+
+    // Case 1: Target cell is empty -> Just move the event
+    if (targetEvents.length === 0) {
+        draggedEvent.day = targetDay;
+        draggedEvent.operatorId = targetOperatorId;
+        showNotification("Turno movido correctamente.", "success");
+    } 
+    // Case 2: Target cell is occupied -> Swap the events
+    else {
+        // Move the dragged event to the target cell
+        draggedEvent.day = targetDay;
+        draggedEvent.operatorId = targetOperatorId;
+
+        // Move the events from the target cell to the source cell
+        targetEvents.forEach(event => {
+            event.day = sourceDay;
+            event.operatorId = sourceOperatorId;
+        });
+        showNotification("Turnos intercambiados.", "success");
     }
+    
+    // Save, re-render, and finish
+    saveDataToStorage();
+    renderEvents();
+    draggingEvent = null; // Clear the dragging event
 }
 
 function handleDragEnd() {
@@ -756,15 +876,6 @@ function renderEvents() {
                 `;
                 eventElement.dataset.id = event.id;
                 
-                // Right-click for delete
-                eventElement.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirm(`¿Eliminar turno "${event.title}"?`)) {
-                        removeEvent(event.id);
-                    }
-                });
-                
                 cellContainer.appendChild(eventElement);
             }
         }
@@ -773,11 +884,33 @@ function renderEvents() {
     // Setup drag and drop after rendering events
     setupDragAndDrop();
     
-    // Update visual indicators for multiple shifts
-    updateMultipleShiftsIndicators();
-    
     // Update operator hours after rendering events
     updateOperatorHours();
+    updateMultipleShiftsIndicator();
+}
+
+function updateMultipleShiftsIndicator() {
+    const allCells = document.querySelectorAll('.calendar-cell');
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+
+    allCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+
+        const eventsInCell = events.filter(event => 
+            event.day === day && 
+            event.operatorId === operatorId &&
+            event.month === currentMonth &&
+            event.year === currentYear
+        );
+
+        if (eventsInCell.length > 1) {
+            cell.classList.add('multiple-shifts');
+        } else {
+            cell.classList.remove('multiple-shifts');
+        }
+    });
 }
 
 // Eliminar evento
@@ -1002,27 +1135,15 @@ function clearCurrentMonth() {
 
 // Export to Excel
 function exportToExcel() {
-    try {
-        console.log("Starting Excel export...");
-        
-        if (operators.length === 0) {
-            showNotification("No hay operarios para exportar", "warning");
-            return;
-        }
-        
-        // Check if XLSX library is loaded
-        if (typeof XLSX === 'undefined') {
-            showNotification("Error: Biblioteca XLSX no cargada", "error");
-            console.error("XLSX library not loaded");
-            return;
-        }
-        
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long' });
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        console.log("Excel export data:", { year, month, monthName, daysInMonth, operators: operators.length, events: events.length });
+    if (operators.length === 0) {
+        showNotification("No hay operarios para exportar", "warning");
+        return;
+    }
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long' });
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     
     // Create workbook
     const wb = XLSX.utils.book_new();
@@ -1190,16 +1311,9 @@ function exportToExcel() {
         XLSX.utils.book_append_sheet(wb, shiftWs, cleanShiftName);
     });
     
-        // Generate Excel file and trigger download
-        console.log("Generating Excel file with", wb.SheetNames.length, "sheets");
-        XLSX.writeFile(wb, `Cuadrantes_Completo_${monthName}_${year}.xlsx`);
-        showNotification(`Exportado a Excel con ${wb.SheetNames.length} hojas: resumen general, ${operators.length} operarios individuales y ${uniqueShifts.length} tipos de turno`, "success");
-        console.log("Excel export completed successfully");
-        
-    } catch (error) {
-        console.error("Excel export error:", error);
-        showNotification("Error al exportar a Excel: " + error.message, "error");
-    }
+    // Generate Excel file and trigger download
+    XLSX.writeFile(wb, `Cuadrantes_Completo_${monthName}_${year}.xlsx`);
+    showNotification(`Exportado a Excel con ${wb.SheetNames.length} hojas: resumen general, ${operators.length} operarios individuales y ${uniqueShifts.length} tipos de turno`, "success");
 }
 
 // Utility function to show notifications
@@ -1217,20 +1331,152 @@ function showNotification(message, type = "info") {
 
 // Send email with schedule
 function sendEmailSchedule() {
-    const emailInput = document.getElementById('emailInput').value.trim();
+    const emailModal = document.getElementById('emailModal');
+    const operatorSelect = document.getElementById('operatorSelect');
     
-    if (!emailInput || !validateEmail(emailInput)) {
-        showNotification("Por favor introduce un email válido", "error");
+    // Filter operators who have an email
+    const operatorsWithEmail = operators.filter(op => op.email && op.email.trim() !== '');
+    
+    if (operatorsWithEmail.length === 0) {
+        showNotification("No hay operarios con emails registrados.", "warning");
         return;
     }
     
-    document.getElementById('emailStatus').textContent = "Enviando email...";
+    // Populate dropdown
+    operatorSelect.innerHTML = '';
+    operatorsWithEmail.forEach(op => {
+        const option = document.createElement('option');
+        option.value = op.id;
+        option.textContent = op.name;
+        operatorSelect.appendChild(option);
+    });
     
-    // Simulate email sending
-    setTimeout(() => {
-        document.getElementById('emailStatus').textContent = "Email enviado correctamente";
-        showNotification(`Cuadrantes enviados a ${emailInput}`, "success");
-    }, 2000);
+    emailModal.style.display = 'block';
+}
+
+function closeEmailModal() {
+    const emailModal = document.getElementById('emailModal');
+    emailModal.style.display = 'none';
+}
+
+function handleSendEmail() {
+    const operatorSelect = document.getElementById('operatorSelect');
+    const operatorId = operatorSelect.value;
+    const operator = operators.find(op => op.id === operatorId);
+
+    if (!operator || !operator.email) {
+        showNotification("Operario no válido o sin email.", "error");
+        return;
+    }
+
+    const monthName = document.getElementById('currentMonth').textContent;
+    const subject = `Cuadrante de ${monthName}`;
+    const body = generateHtmlScheduleForOperator(operatorId);
+
+    const mailtoLink = `mailto:${operator.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    // Use window.open to be more robust
+    const emailWindow = window.open(mailtoLink, '_blank');
+    if (!emailWindow) {
+        // If popup was blocked, fall back to changing location
+        window.location.href = mailtoLink;
+    }
+
+
+    closeEmailModal();
+    showNotification(`Preparando email para ${operator.name}...`, "success");
+}
+
+function generateHtmlScheduleForOperator(operatorId) {
+    const operator = operators.find(op => op.id === operatorId);
+    if (!operator) return "";
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    let totalHours = 0;
+    let schedule = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
+        
+        const dayEvents = events.filter(event => 
+            event.operatorId === operator.id && event.day === day &&
+            event.month === month && event.year === year
+        );
+
+        if (dayEvents.length > 0) {
+            dayEvents.forEach(event => {
+                const startHour = parseInt(event.startTime.split(':')[0]);
+                const startMinute = parseInt(event.startTime.split(':')[1]);
+                const endHour = parseInt(event.endTime.split(':')[0]);
+                const endMinute = parseInt(event.endTime.split(':')[1]);
+                
+                let shiftHours = (endHour + endMinute/60) - (startHour + startMinute/60);
+                if (shiftHours < 0) shiftHours += 24;
+                totalHours += shiftHours;
+
+                schedule.push({
+                    day: `${day} (${dayName})`,
+                    shift: event.title,
+                    time: `${event.startTime} - ${event.endTime}`,
+                    hours: shiftHours.toFixed(1)
+                });
+            });
+        } else {
+            schedule.push({ day: `${day} (${dayName})`, shift: "Libre", time: "-", hours: "0" });
+        }
+    }
+
+    // Basic styling for the HTML email
+    const styles = `
+        <style>
+            body { font-family: sans-serif; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+            th { background-color: #f2f2f2; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            h2, h3 { color: #333; }
+        </style>
+    `;
+
+    const tableBody = schedule.map(row => `
+        <tr>
+            <td>${row.day}</td>
+            <td>${row.shift}</td>
+            <td>${row.time}</td>
+            <td>${row.hours}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+        <html>
+            <head>${styles}</head>
+            <body>
+                <h2>Cuadrante Individual para ${operator.name}</h2>
+                <h3>Mes: ${monthName}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Día</th>
+                            <th>Turno</th>
+                            <th>Horario</th>
+                            <th>Horas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+                <h3>Total de Horas: ${totalHours.toFixed(1)}</h3>
+            </body>
+        </html>
+    `;
+
+    return html;
 }
 
 // Calculate total hours for an operator in current month
@@ -1309,525 +1555,233 @@ function updateOperatorHours() {
     });
 }
 
-// Update visual indicators for cells with multiple shifts
-function updateMultipleShiftsIndicators() {
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
+// Initialize the app when the DOM is ready
+
+// --- CONTEXT MENU FUNCTIONS ---
+
+function initContextMenu() {
+    const contextMenu = document.getElementById('customContextMenu');
     
-    // Clear all multiple-shifts classes first
-    document.querySelectorAll('.calendar-cell').forEach(cell => {
-        cell.classList.remove('multiple-shifts');
-    });
-    
-    // Group events by cell to find multiple shifts
-    const cellEvents = {};
-    events.forEach(event => {
-        if (event.month === currentMonth && event.year === currentYear) {
-            const cellKey = `${event.operatorId}-${event.day}`;
-            if (!cellEvents[cellKey]) {
-                cellEvents[cellKey] = [];
-            }
-            cellEvents[cellKey].push(event);
+    // Hide menu if clicked outside
+    window.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            hideContextMenu();
         }
     });
-    
-    // Add visual indicator for cells with multiple shifts
-    Object.keys(cellEvents).forEach(cellKey => {
-        const [operatorId, day] = cellKey.split('-');
-        if (cellEvents[cellKey].length > 1) {
-            const cell = document.querySelector(`[data-cell-id="cell-${operatorId}-${day}"]`);
-            if (cell) {
-                cell.classList.add('multiple-shifts');
-            }
+
+    // Handle actions
+    contextMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (action) {
+            handleContextMenuAction(action);
+            hideContextMenu();
         }
     });
 }
 
-// Handle right-click on cells
-function handleCellRightClick(event) {
-    event.preventDefault();
+function hideContextMenu() {
+    const contextMenu = document.getElementById('customContextMenu');
+    contextMenu.style.display = 'none';
+    contextCell = null;
+}
+
+function showContextMenu(e) {
+    e.preventDefault();
     
-    const cellId = event.currentTarget.dataset.cellId;
-    
-    // If right-clicking on a non-selected cell, select only that cell
-    if (!selectedCells.includes(event.currentTarget)) {
+    const clickedCell = e.target.closest('.calendar-cell');
+    if (!clickedCell) return;
+
+    // If the clicked cell is NOT part of an existing selection,
+    // clear the old selection and make this cell the new selection.
+    if (!selectedCells.includes(clickedCell)) {
         clearCellSelection();
-        selectedCells = [event.currentTarget];
-        event.currentTarget.classList.add('selected');
-        updateSelectionButtons();
+        clickedCell.classList.add('selected');
+        selectedCells = [clickedCell];
     }
     
-    // Show context menu at mouse position
-    showContextMenu(event.pageX, event.pageY);
-}
+    // The context menu now ALWAYS acts on the current selection (selectedCells array).
+    contextCell = clickedCell; // Still useful for paste destination
 
-function copySelection() {
-    if (selectedCells.length === 0) return;
+    const contextMenu = document.getElementById('customContextMenu');
     
-    clipboard = {
-        type: 'copy',
-        data: selectedCells.map(cell => {
-            const operatorId = cell.dataset.operatorId;
-            const day = parseInt(cell.dataset.day);
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            
-            return {
-                cellId: cell.dataset.cellId,
-                operatorId,
-                day,
-                events: events.filter(e => 
-                    e.operatorId === operatorId && 
-                    e.day === day && 
-                    e.month === month && 
-                    e.year === year
-                )
-            };
-        }),
-        originalSelection: [...selectedCells]
-    };
-    
-    showNotification(`${selectedCells.length} celdas copiadas`, "success");
-}
-
-function cutSelection() {
-    if (selectedCells.length === 0) return;
-    
-    clipboard = {
-        type: 'cut',
-        data: selectedCells.map(cell => {
-            const operatorId = cell.dataset.operatorId;
-            const day = parseInt(cell.dataset.day);
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            
-            return {
-                cellId: cell.dataset.cellId,
-                operatorId,
-                day,
-                events: events.filter(e => 
-                    e.operatorId === operatorId && 
-                    e.day === day && 
-                    e.month === month && 
-                    e.year === year
-                )
-            };
-        }),
-        originalSelection: [...selectedCells]
-    };
-    
-    showNotification(`${selectedCells.length} celdas cortadas`, "success");
-}
-
-function pasteSelection() {
-    if (!clipboard || selectedCells.length === 0) return;
-    
-    const targetStartCell = selectedCells[0];
-    const targetOperatorId = targetStartCell.dataset.operatorId;
-    const targetDay = parseInt(targetStartCell.dataset.day);
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    
-    // Calculate offset from original position
-    const originalStartCell = clipboard.data[0];
-    const originalOperatorIndex = operators.findIndex(op => op.id === originalStartCell.operatorId);
-    const targetOperatorIndex = operators.findIndex(op => op.id === targetOperatorId);
-    
-    const dayOffset = targetDay - originalStartCell.day;
-    const operatorOffset = targetOperatorIndex - originalOperatorIndex;
-    
-    let pastedCount = 0;
-    
-    clipboard.data.forEach(cellData => {
-        const originalOperatorIndex = operators.findIndex(op => op.id === cellData.operatorId);
-        const newOperatorIndex = originalOperatorIndex + operatorOffset;
-        const newDay = cellData.day + dayOffset;
-        
-        // Check if target position is valid
-        if (newOperatorIndex >= 0 && newOperatorIndex < operators.length && newDay >= 1 && newDay <= 31) {
-            const newOperatorId = operators[newOperatorIndex].id;
-            
-            // Clear existing events in target cell first
-            events = events.filter(e => !(
-                e.operatorId === newOperatorId && 
-                e.day === newDay && 
-                e.month === month && 
-                e.year === year
-            ));
-            
-            // Add events to target position
-            cellData.events.forEach(event => {
-                const newEvent = {
-                    ...event,
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                    operatorId: newOperatorId,
-                    day: newDay,
-                    month: month,
-                    year: year
-                };
-                events.push(newEvent);
-                pastedCount++;
-            });
-        }
-    });
-    
-    // If it was a cut operation, remove events from original locations
-    if (clipboard.type === 'cut') {
-        clipboard.data.forEach(cellData => {
-            cellData.events.forEach(event => {
-                events = events.filter(e => e.id !== event.id);
-            });
-        });
-        clipboard = null; // Clear clipboard after cut
-    }
-    
-    saveDataToStorage();
-    renderEvents();
-    updateOperatorHours();
-    showNotification(`${pastedCount} turnos pegados correctamente`, "success");
-}
-
-function deleteSelection() {
-    if (selectedCells.length === 0) return;
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    let deletedCount = 0;
-    
-    selectedCells.forEach(cell => {
-        const operatorId = cell.dataset.operatorId;
+    // Enable/disable options based on whether ANY selected cell has events
+    const eventsInSelection = selectedCells.some(cell => {
         const day = parseInt(cell.dataset.day);
-        
-        const beforeCount = events.length;
-        events = events.filter(e => !(
-            e.operatorId === operatorId && 
-            e.day === day && 
-            e.month === month && 
-            e.year === year
-        ));
-        deletedCount += beforeCount - events.length;
+        const operatorId = cell.dataset.operatorId;
+        return events.some(event => event.day === day && event.operatorId === operatorId);
     });
-    
-    if (deletedCount > 0) {
-        saveDataToStorage();
-        renderEvents();
-        updateOperatorHours();
-        showNotification(`${deletedCount} turnos eliminados`, "success");
+
+    const copyItem = contextMenu.querySelector('[data-action="copy"]');
+    const cutItem = contextMenu.querySelector('[data-action="cut"]');
+    const deleteItem = contextMenu.querySelector('[data-action="delete"]');
+    const pasteItem = contextMenu.querySelector('[data-action="paste"]');
+
+    if (!eventsInSelection) {
+        copyItem.classList.add('disabled');
+        cutItem.classList.add('disabled');
+        deleteItem.classList.add('disabled');
+    } else {
+        copyItem.classList.remove('disabled');
+        cutItem.classList.remove('disabled');
+        deleteItem.classList.remove('disabled');
     }
-}
 
-// Keyboard shortcuts
-function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-        // Only handle shortcuts when not typing in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        
-        if (e.ctrlKey && e.key === 'c') {
-            e.preventDefault();
-            copySelection();
-        } else if (e.ctrlKey && e.key === 'v') {
-            e.preventDefault();
-            pasteSelection();
-        } else if (e.key === 'Delete' || e.key === 'Supr') {
-            e.preventDefault();
-            deleteSelection();
-        } else if (e.ctrlKey && e.key === 'x') {
-            e.preventDefault();
-            cutSelection();
-        } else if (e.key === 'Escape') {
-            closeContextMenu();
-        }
-    });
-}
-
-// Setup context menu event listeners
-function setupContextMenu() {
-    // Context menu item event listeners
-    document.getElementById('cutMenuItem').addEventListener('click', () => {
-        cutSelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('copyMenuItem').addEventListener('click', () => {
-        copySelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('pasteMenuItem').addEventListener('click', () => {
-        pasteSelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('deleteMenuItem').addEventListener('click', () => {
-        deleteSelection();
-        closeContextMenu();
-    });
-}
-
-// Context menu functionality
-let contextMenu = null;
-
-function showContextMenu(x, y) {
-    if (!contextMenu) {
-        contextMenu = document.getElementById('contextMenu');
+    if (clipboard.events.length === 0) {
+        pasteItem.classList.add('disabled');
+    } else {
+        pasteItem.classList.remove('disabled');
     }
-    
-    // Update menu items based on current state
-    const cutItem = document.getElementById('cutMenuItem');
-    const copyItem = document.getElementById('copyMenuItem');
-    const pasteItem = document.getElementById('pasteMenuItem');
-    const deleteItem = document.getElementById('deleteMenuItem');
-    
-    // Enable/disable items based on selection and clipboard
-    const hasSelection = selectedCells.length > 0;
-    const hasClipboard = clipboard && (clipboard.type === 'copy' || clipboard.type === 'cut') && clipboard.data.length > 0;
-    
-    cutItem.disabled = !hasSelection;
-    copyItem.disabled = !hasSelection;
-    pasteItem.disabled = !hasClipboard;
-    deleteItem.disabled = !hasSelection;
     
     // Position and show menu
-    contextMenu.style.left = x + 'px';
-    contextMenu.style.top = y + 'px';
+    contextMenu.style.left = `${e.clientX}px`;
+    contextMenu.style.top = `${e.clientY}px`;
     contextMenu.style.display = 'block';
-    
-    // Close menu when clicking outside
-    setTimeout(() => {
-        document.addEventListener('click', closeContextMenu, { once: true });
-    }, 10);
 }
 
-function closeContextMenu() {
-    if (contextMenu) {
-        contextMenu.style.display = 'none';
+function handleContextMenuAction(action) {
+    if (!contextCell) return;
+    
+    switch (action) {
+        case 'copy':
+            menuCopy();
+            break;
+        case 'cut':
+            menuCut();
+            break;
+        case 'paste':
+            menuPaste();
+            break;
+        case 'delete':
+            menuDelete();
+            break;
     }
 }
 
-// Handle right-click on cells
-function handleCellRightClick(event) {
-    event.preventDefault();
-    
-    const cellId = event.currentTarget.dataset.cellId;
-    
-    // If right-clicking on a non-selected cell, select only that cell
-    if (!selectedCells.includes(event.currentTarget)) {
-        clearCellSelection();
-        selectedCells = [event.currentTarget];
-        event.currentTarget.classList.add('selected');
-        updateSelectionButtons();
-    }
-    
-    // Show context menu at mouse position
-    showContextMenu(event.pageX, event.pageY);
-}
-
-function copySelection() {
+function menuCopy() {
     if (selectedCells.length === 0) return;
-    
-    clipboard = {
-        type: 'copy',
-        data: selectedCells.map(cell => {
-            const operatorId = cell.dataset.operatorId;
-            const day = parseInt(cell.dataset.day);
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            
-            return {
-                cellId: cell.dataset.cellId,
-                operatorId,
-                day,
-                events: events.filter(e => 
-                    e.operatorId === operatorId && 
-                    e.day === day && 
-                    e.month === month && 
-                    e.year === year
-                )
-            };
-        }),
-        originalSelection: [...selectedCells]
-    };
-    
-    showNotification(`${selectedCells.length} celdas copiadas`, "success");
-}
 
-function cutSelection() {
-    if (selectedCells.length === 0) return;
-    
-    clipboard = {
-        type: 'cut',
-        data: selectedCells.map(cell => {
-            const operatorId = cell.dataset.operatorId;
-            const day = parseInt(cell.dataset.day);
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            
-            return {
-                cellId: cell.dataset.cellId,
-                operatorId,
-                day,
-                events: events.filter(e => 
-                    e.operatorId === operatorId && 
-                    e.day === day && 
-                    e.month === month && 
-                    e.year === year
-                )
-            };
-        }),
-        originalSelection: [...selectedCells]
-    };
-    
-    showNotification(`${selectedCells.length} celdas cortadas`, "success");
-}
+    const rows = selectedCells.map(c => parseInt(c.dataset.row));
+    const cols = selectedCells.map(c => parseInt(c.dataset.col));
 
-function pasteSelection() {
-    if (!clipboard || selectedCells.length === 0) return;
-    
-    const targetStartCell = selectedCells[0];
-    const targetOperatorId = targetStartCell.dataset.operatorId;
-    const targetDay = parseInt(targetStartCell.dataset.day);
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    
-    // Calculate offset from original position
-    const originalStartCell = clipboard.data[0];
-    const originalOperatorIndex = operators.findIndex(op => op.id === originalStartCell.operatorId);
-    const targetOperatorIndex = operators.findIndex(op => op.id === targetOperatorId);
-    
-    const dayOffset = targetDay - originalStartCell.day;
-    const operatorOffset = targetOperatorIndex - originalOperatorIndex;
-    
-    let pastedCount = 0;
-    
-    clipboard.data.forEach(cellData => {
-        const originalOperatorIndex = operators.findIndex(op => op.id === cellData.operatorId);
-        const newOperatorIndex = originalOperatorIndex + operatorOffset;
-        const newDay = cellData.day + dayOffset;
-        
-        // Check if target position is valid
-        if (newOperatorIndex >= 0 && newOperatorIndex < operators.length && newDay >= 1 && newDay <= 31) {
-            const newOperatorId = operators[newOperatorIndex].id;
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    const minCol = Math.min(...cols);
+    const maxCol = Math.max(...cols);
+
+    clipboard.width = maxCol - minCol + 1;
+    clipboard.height = maxRow - minRow + 1;
+    clipboard.events = [];
+
+    selectedCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+        const cellEvents = events.filter(event => event.day === day && event.operatorId === operatorId);
+
+        if (cellEvents.length > 0) {
+            const rowOffset = parseInt(cell.dataset.row) - minRow;
+            const colOffset = parseInt(cell.dataset.col) - minCol;
             
-            // Clear existing events in target cell first
-            events = events.filter(e => !(
-                e.operatorId === newOperatorId && 
-                e.day === newDay && 
-                e.month === month && 
-                e.year === year
-            ));
-            
-            // Add events to target position
-            cellData.events.forEach(event => {
-                const newEvent = {
-                    ...event,
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                    operatorId: newOperatorId,
-                    day: newDay,
-                    month: month,
-                    year: year
-                };
-                events.push(newEvent);
-                pastedCount++;
+            cellEvents.forEach(event => {
+                clipboard.events.push({
+                    event: JSON.parse(JSON.stringify(event)), // Deep copy
+                    rowOffset,
+                    colOffset
+                });
             });
         }
     });
-    
-    // If it was a cut operation, remove events from original locations
-    if (clipboard.type === 'cut') {
-        clipboard.data.forEach(cellData => {
-            cellData.events.forEach(event => {
-                events = events.filter(e => e.id !== event.id);
-            });
-        });
-        clipboard = null; // Clear clipboard after cut
+
+    if (clipboard.events.length > 0) {
+        showNotification(`${clipboard.events.length} turno(s) copiado(s) de un bloque de ${clipboard.width}x${clipboard.height}.`, 'success');
+    } else {
+        showNotification('No hay turnos para copiar en la selección.', 'warning');
     }
+}
+
+function menuCut() {
+    menuCopy(); // This now populates the new clipboard structure
+    if (clipboard.events.length > 0) {
+        menuDelete(); // This deletes from the original selection
+        showNotification(`${clipboard.events.length} turno(s) cortado(s).`, 'success');
+    }
+}
+
+function menuPaste() {
+    if (clipboard.events.length === 0) {
+        showNotification('No hay nada que pegar en el portapapeles.', 'warning');
+        return;
+    }
+
+    const startRow = parseInt(contextCell.dataset.row);
+    const startCol = parseInt(contextCell.dataset.col);
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
     
+    // 1. Clear the destination area first (destructive paste)
+    for (let r = 0; r < clipboard.height; r++) {
+        for (let c = 0; c < clipboard.width; c++) {
+            const targetRow = startRow + r;
+            const targetCol = startCol + c;
+            const targetCell = document.querySelector(`.calendar-cell[data-row='${targetRow}'][data-col='${targetCol}']`);
+            
+            if (targetCell) {
+                const day = parseInt(targetCell.dataset.day);
+                const operatorId = targetCell.dataset.operatorId;
+                events = events.filter(event => !(event.day === day && event.operatorId === operatorId));
+            }
+        }
+    }
+
+    // 2. Paste the new events
+    let addedCount = 0;
+    clipboard.events.forEach(item => {
+        const targetRow = startRow + item.rowOffset;
+        const targetCol = startCol + item.colOffset;
+        const targetCell = document.querySelector(`.calendar-cell[data-row='${targetRow}'][data-col='${targetCol}']`);
+
+        if (targetCell) {
+            const newEvent = {
+                ...item.event,
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+                day: parseInt(targetCell.dataset.day),
+                operatorId: targetCell.dataset.operatorId,
+                month: month,
+                year: year
+            };
+            events.push(newEvent);
+            addedCount++;
+        }
+    });
+
+    // 3. Save and re-render
     saveDataToStorage();
     renderEvents();
     updateOperatorHours();
-    showNotification(`${pastedCount} turnos pegados correctamente`, "success");
+    showNotification(`${addedCount} turno(s) pegado(s) en el nuevo rango.`, 'success');
 }
 
-function deleteSelection() {
+function menuDelete() {
     if (selectedCells.length === 0) return;
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+
     let deletedCount = 0;
-    
     selectedCells.forEach(cell => {
-        const operatorId = cell.dataset.operatorId;
         const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
         
-        const beforeCount = events.length;
-        events = events.filter(e => !(
-            e.operatorId === operatorId && 
-            e.day === day && 
-            e.month === month && 
-            e.year === year
-        ));
-        deletedCount += beforeCount - events.length;
+        const initialCount = events.length;
+        events = events.filter(event => !(event.day === day && event.operatorId === operatorId));
+        deletedCount += initialCount - events.length;
     });
-    
+
     if (deletedCount > 0) {
         saveDataToStorage();
         renderEvents();
         updateOperatorHours();
-        showNotification(`${deletedCount} turnos eliminados`, "success");
+        showNotification(`${deletedCount} turno(s) eliminado(s) de ${selectedCells.length} celdas.`, 'success');
     }
+    clearCellSelection();
 }
 
-// Keyboard shortcuts
-function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-        // Only handle shortcuts when not typing in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        
-        if (e.ctrlKey && e.key === 'c') {
-            e.preventDefault();
-            copySelection();
-        } else if (e.ctrlKey && e.key === 'v') {
-            e.preventDefault();
-            pasteSelection();
-        } else if (e.key === 'Delete' || e.key === 'Supr') {
-            e.preventDefault();
-            deleteSelection();
-        } else if (e.ctrlKey && e.key === 'x') {
-            e.preventDefault();
-            cutSelection();
-        } else if (e.key === 'Escape') {
-            closeContextMenu();
-        }
-    });
-}
-
-// Setup context menu event listeners
-function setupContextMenu() {
-    // Context menu item event listeners
-    document.getElementById('cutMenuItem').addEventListener('click', () => {
-        cutSelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('copyMenuItem').addEventListener('click', () => {
-        copySelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('pasteMenuItem').addEventListener('click', () => {
-        pasteSelection();
-        closeContextMenu();
-    });
-    
-    document.getElementById('deleteMenuItem').addEventListener('click', () => {
-        deleteSelection();
-        closeContextMenu();
-    });
-}
-
-// Initialize the app when the DOM is ready
 
 // Edit configuration
 function editConfig(configId) {
@@ -1865,3 +1819,28 @@ function deleteConfig(configId) {
     renderSavedConfigs();
     showNotification('Configuración eliminada', 'success');
 }
+
+function updateMultipleShiftsIndicator() {
+    const allCells = document.querySelectorAll('.calendar-cell');
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+
+    allCells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const operatorId = cell.dataset.operatorId;
+
+        const eventsInCell = events.filter(event => 
+            event.day === day && 
+            event.operatorId === operatorId &&
+            event.month === currentMonth &&
+            event.year === currentYear
+        );
+
+        if (eventsInCell.length > 1) {
+            cell.classList.add('multiple-shifts');
+        } else {
+            cell.classList.remove('multiple-shifts');
+        }
+    });
+}
+

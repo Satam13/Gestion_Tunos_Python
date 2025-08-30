@@ -19,16 +19,13 @@
         </header>
 
         <div class="month-header">
-            <div class="month-nav-stacked">
-                <button id="prevMonth" title="Mes Anterior">&#9650;</button> <!-- Up arrow -->
-                <button id="nextMonth" title="Mes Siguiente">&#9660;</button> <!-- Down arrow -->
-            </div>
-            <img src="logotipo.png" alt="Logotipo" class="logo">
-            <button id="toggleSidebarBtn" title="Ver/Ocular Panel">&#128065;</button> <!-- Eye icon -->
-        </div>
-
-        <div class="calendar-title-container">
             <h2 class="month-title" id="currentMonth">Mes Actual</h2>
+            <img src="logotipo.png" alt="Logotipo" class="logo">
+            <div class="header-controls">
+                <button id="prevMonth" title="Mes Anterior">&#9650;</button>
+                <button id="nextMonth" title="Mes Siguiente">&#9660;</button>
+                <button id="toggleSidebarBtn" title="Ver/Ocultar Panel">&#128065;</button>
+            </div>
         </div>
 
         <div class="main-content">
@@ -170,7 +167,7 @@
         <div class="modal-content">
             <span class="close-modal" id="closeDraftsModal">&times;</span>
             <h3>Gestión de Borradores</h3>
-
+            
             <div class="form-group">
                 <label for="draftName">Nombre del Borrador:</label>
                 <input type="text" id="draftName" placeholder="Ej: Borrador Semana 1">

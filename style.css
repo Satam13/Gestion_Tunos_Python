@@ -8,7 +8,7 @@
 body {
     background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
     min-height: 100vh;
-    padding: 10px;
+    padding: 20px;
     color: white;
     overflow-x: hidden;
 }
@@ -22,8 +22,8 @@ header {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 0;
-    margin-bottom: 20px;
+    padding: 10px 0;
+    margin-bottom: 10px;
     text-align: center;
 }
 
@@ -63,53 +63,45 @@ h1 {
     flex-shrink: 0;
 }
 
-/* New layout rules for month header */
-.month-header .month-nav-stacked,
-.month-header #toggleSidebarBtn {
-    flex: 1; /* Make left and right containers take up equal space */
+.month-header .month-title,
+.month-header .header-controls {
+    flex: 1;
 }
 
-.month-nav-stacked {
+.month-title {
+    font-size: 1.8rem;
+    font-weight: bold;
+    text-transform: capitalize;
+    text-align: left;
+}
+
+.header-controls {
     display: flex;
     flex-direction: column;
-    align-items: flex-start; /* Align buttons to the left */
-    gap: 8px;
+    align-items: flex-end;
+    gap: 5px;
 }
 
-.month-nav-stacked button,
-#toggleSidebarBtn {
+.header-controls button {
     background: rgba(255, 255, 255, 0.15);
     border: none;
     border-radius: 8px;
     color: white;
     cursor: pointer;
-    font-size: 1.5rem; /* Larger icons */
+    font-size: 1rem;
     line-height: 1;
-    padding: 8px 12px;
+    padding: 0;
+    width: 40px;
+    height: 40px;
     margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background-color 0.3s ease;
 }
 
-.month-nav-stacked button:hover,
-#toggleSidebarBtn:hover {
+.header-controls button:hover {
     background: rgba(255, 255, 255, 0.25);
-}
-
-#toggleSidebarBtn {
-    justify-self: flex-end; /* Align button itself to the right */
-    width: fit-content;
-    margin-left: auto;
-}
-
-.calendar-title-container {
-    text-align: center;
-    margin-bottom: 15px;
-}
-
-.month-title {
-    font-size: 2.2rem;
-    font-weight: bold;
-    text-transform: capitalize;
 }
 
 .main-content {
@@ -235,6 +227,10 @@ h1 {
     top: 0;
     z-index: 30;
     min-width: 80px;
+}
+
+.day-header.weekend {
+    background: rgba(93, 173, 226, 0.2);
 }
 
 .calendar-cell {

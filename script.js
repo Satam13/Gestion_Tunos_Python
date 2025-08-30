@@ -1568,7 +1568,7 @@ function updateOperatorHours() {
 // --- DRAFT MANAGEMENT FUNCTIONS ---
 
 function openDraftsModal() {
-    displayDrafts();
+    displayDrafts(); 
     document.getElementById('draftsModal').style.display = 'block';
 }
 
@@ -1603,7 +1603,7 @@ function saveDraft() {
 
     showNotification(`Borrador '${draftName}' guardado correctamente.`, 'success');
     draftNameInput.value = '';
-
+    
     displayDrafts();
 }
 
@@ -1627,7 +1627,7 @@ function displayDrafts() {
     drafts.sort().forEach(draftName => {
         const draftItem = document.createElement('div');
         draftItem.className = 'draft-item';
-
+        
         draftItem.innerHTML = `
             <span>${draftName}</span>
             <div class="draft-actions">
@@ -1665,13 +1665,13 @@ function loadDraft(draftName) {
 
                 generateCalendar();
                 renderSavedConfigs();
-
+                
                 if (savedConfigs.length > 0) {
                     setActiveConfig(savedConfigs[0].id);
                 } else {
                     activeConfig = null;
                 }
-
+                
                 closeDraftsModal();
                 showNotification(`Borrador '${draftName}' cargado correctamente.`, 'success');
             } else {
@@ -1695,7 +1695,7 @@ function deleteDraft(draftName) {
     localStorage.removeItem(draftKey);
 
     showNotification(`Borrador '${draftName}' eliminado.`, 'success');
-
+    
     displayDrafts();
 }
 
@@ -1703,7 +1703,7 @@ function deleteDraft(draftName) {
 function toggleSidebar() {
     const mainContent = document.querySelector('.main-content');
     mainContent.classList.toggle('sidebar-hidden');
-
+    
     const toggleBtn = document.getElementById('toggleSidebarBtn');
     if (mainContent.classList.contains('sidebar-hidden')) {
         toggleBtn.title = 'Mostrar Panel';

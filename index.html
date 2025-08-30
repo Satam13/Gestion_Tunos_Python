@@ -19,13 +19,16 @@
         </header>
 
         <div class="month-header">
-            <h2 class="month-title" id="currentMonth">Mes Actual</h2>
-            <img src="logotipo.png" alt="Logotipo" class="logo">
-            <div class="month-nav">
-                <button id="prevMonth">&laquo; Mes Anterior</button>
-                <button id="nextMonth">Mes Siguiente &raquo;</button>
-                <button id="toggleSidebarBtn" title="Ocultar/Mostrar Panel">&#x2194;</button>
+            <div class="month-nav-stacked">
+                <button id="prevMonth" title="Mes Anterior">&#9650;</button> <!-- Up arrow -->
+                <button id="nextMonth" title="Mes Siguiente">&#9660;</button> <!-- Down arrow -->
             </div>
+            <img src="logotipo.png" alt="Logotipo" class="logo">
+            <button id="toggleSidebarBtn" title="Ver/Ocular Panel">&#128065;</button> <!-- Eye icon -->
+        </div>
+
+        <div class="calendar-title-container">
+            <h2 class="month-title" id="currentMonth">Mes Actual</h2>
         </div>
 
         <div class="main-content">

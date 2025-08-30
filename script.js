@@ -74,13 +74,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Email confirm button
     document.getElementById('sendEmailConfirmBtn').addEventListener('click', handleSendEmail);
 
+    // UI listeners
+    document.getElementById('toggleSidebarBtn').addEventListener('click', toggleSidebar);
+
     // Draft management listeners
     document.getElementById('manageDraftsBtn').addEventListener('click', openDraftsModal);
     document.getElementById('closeDraftsModal').addEventListener('click', closeDraftsModal);
     document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
-
-    // UI listeners
-    document.getElementById('toggleSidebarBtn').addEventListener('click', toggleSidebar);
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -1585,7 +1585,6 @@ function saveDraft() {
         return;
     }
 
-    // Check for duplicate draft name
     if (localStorage.getItem(`draft_${draftName}`)) {
         if (!confirm(`Ya existe un borrador con el nombre '${draftName}'. ¿Deseas sobrescribirlo?`)) {
             return;
@@ -1605,7 +1604,6 @@ function saveDraft() {
     showNotification(`Borrador '${draftName}' guardado correctamente.`, 'success');
     draftNameInput.value = '';
 
-    // Refresh the list of drafts in the modal
     displayDrafts();
 }
 
@@ -1617,7 +1615,7 @@ function displayDrafts() {
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key.startsWith('draft_')) {
-            drafts.push(key.substring(6)); // Get name after 'draft_'
+            drafts.push(key.substring(6));
         }
     }
 
@@ -1657,18 +1655,14 @@ function loadDraft(draftName) {
         try {
             const data = JSON.parse(storedData);
 
-            // Validate data structure
             if (data && Array.isArray(data.events) && Array.isArray(data.savedConfigs) && Array.isArray(data.operators)) {
-                // Restore data from draft
                 events = data.events;
                 savedConfigs = data.savedConfigs;
                 operators = data.operators;
                 currentDate = data.currentDate ? new Date(data.currentDate) : new Date();
 
-                // Save the loaded data as the main state
                 saveDataToStorage();
 
-                // Re-render the entire UI
                 generateCalendar();
                 renderSavedConfigs();
 
@@ -1702,12 +1696,8 @@ function deleteDraft(draftName) {
 
     showNotification(`Borrador '${draftName}' eliminado.`, 'success');
 
-    // Refresh the list of drafts
     displayDrafts();
 }
-
-
-// --- CONTEXT MENU FUNCTIONS ---
 
 // --- UI FUNCTIONS ---
 function toggleSidebar() {
@@ -1721,6 +1711,8 @@ function toggleSidebar() {
         toggleBtn.title = 'Ocultar Panel';
     }
 }
+
+// --- CONTEXT MENU FUNCTIONS ---
 
 function initContextMenu() {
     const contextMenu = document.getElementById('customContextMenu');

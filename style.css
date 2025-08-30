@@ -22,20 +22,14 @@ header {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 10px 0;
-    margin-bottom: 10px;
+    padding: 20px 0;
+    margin-bottom: 20px;
     text-align: center;
 }
 
 .logo {
     max-height: 120px;
     margin-bottom: 15px;
-}
-
-.month-header .logo {
-    max-height: 116px;
-    margin-bottom: 0;
-    flex-shrink: 0;
 }
 
 h1 {
@@ -59,47 +53,63 @@ h1 {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 15px;
     padding: 10px 25px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
 }
 
-.month-header .month-title,
-.month-header .month-nav {
-    flex: 1;
+.month-header .logo {
+    max-height: 145px;
+    margin-bottom: 0;
+    flex-shrink: 0;
 }
 
-.month-header .month-nav {
+/* New layout rules for month header */
+.month-header .month-nav-stacked,
+.month-header #toggleSidebarBtn {
+    flex: 1; /* Make left and right containers take up equal space */
+}
+
+.month-nav-stacked {
     display: flex;
-    justify-content: flex-end;
+    flex-direction: column;
+    align-items: flex-start; /* Align buttons to the left */
+    gap: 8px;
 }
 
-.month-title {
-    font-size: 1.8rem;
-    font-weight: bold;
-    text-transform: capitalize;
-}
-
-.month-nav button {
+.month-nav-stacked button,
+#toggleSidebarBtn {
     background: rgba(255, 255, 255, 0.15);
-    color: white;
     border: none;
     border-radius: 8px;
-    padding: 8px 15px;
+    color: white;
     cursor: pointer;
-    font-size: 1rem;
-    margin: 0 5px;
-    transition: all 0.3s ease;
+    font-size: 1.5rem; /* Larger icons */
+    line-height: 1;
+    padding: 8px 12px;
+    margin: 0;
+    transition: background-color 0.3s ease;
 }
 
-.month-nav button:hover {
+.month-nav-stacked button:hover,
+#toggleSidebarBtn:hover {
     background: rgba(255, 255, 255, 0.25);
 }
 
 #toggleSidebarBtn {
-    background: rgba(255, 255, 255, 0.2);
+    justify-self: flex-end; /* Align button itself to the right */
+    width: fit-content;
+    margin-left: auto;
+}
+
+.calendar-title-container {
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.month-title {
+    font-size: 2.2rem;
     font-weight: bold;
-    font-size: 1.2rem;
-    padding: 8px 12px;
+    text-transform: capitalize;
 }
 
 .main-content {

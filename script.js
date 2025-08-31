@@ -164,6 +164,7 @@ function loadDataFromStorage() {
 // Generar calendario con operarios y días
 function generateCalendar() {
     const calendarGrid = document.getElementById('calendarGrid');
+    clearRestWarnings(); // Clear warnings before building the new month
     calendarGrid.innerHTML = '';
     
     const year = currentDate.getFullYear();
@@ -990,7 +991,14 @@ function calculateHoursBetween(shift1, shift2) {
  * @returns {object|null} The last shift object or null if none.
  */
 function getLastShiftOfDay(day, operatorId) {
-    const dayShifts = events.filter(e => e.day === day && e.operatorId === operatorId);
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const dayShifts = events.filter(e =>
+        e.day === day &&
+        e.operatorId === operatorId &&
+        e.month === currentMonth &&
+        e.year === currentYear
+    );
     if (dayShifts.length === 0) return null;
     // Sort by start time descending to get the latest shift of the day
     dayShifts.sort((a, b) => b.startTime.localeCompare(a.startTime));
@@ -1004,7 +1012,14 @@ function getLastShiftOfDay(day, operatorId) {
  * @returns {object|null} The first shift object or null if none.
  */
 function getFirstShiftOfDay(day, operatorId) {
-    const dayShifts = events.filter(e => e.day === day && e.operatorId === operatorId);
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const dayShifts = events.filter(e =>
+        e.day === day &&
+        e.operatorId === operatorId &&
+        e.month === currentMonth &&
+        e.year === currentYear
+    );
     if (dayShifts.length === 0) return null;
     // Sort by start time ascending to get the earliest shift of the day
     dayShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));

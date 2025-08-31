@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Init context menu
     initContextMenu();
+
+    // Init collapsible panels
+    initCollapsiblePanels();
     
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
@@ -1565,6 +1568,52 @@ function updateOperatorHours() {
 
 // Initialize the app when the DOM is ready
 
+// --- Collapsible Panel Logic ---
+function initCollapsiblePanels() {
+    const triggers = document.querySelectorAll('.collapsible-trigger');
+    const storageKeyPrefix = 'collapsibleState-';
+
+    triggers.forEach(trigger => {
+        const content = trigger.nextElementSibling;
+        const icon = trigger.querySelector('.collapsible-icon');
+        const id = trigger.id;
+
+        if (!content || !id || !icon) {
+            console.error('Collapsible structure is missing elements for trigger:', trigger);
+            return;
+        }
+
+        // Function to set the state
+        const setPanelState = (isExpanded) => {
+            if (isExpanded) {
+                trigger.classList.add('active');
+                content.classList.add('expanded');
+                icon.textContent = '−'; // Minus sign (U+2212)
+                localStorage.setItem(storageKeyPrefix + id, 'expanded');
+            } else {
+                trigger.classList.remove('active');
+                content.classList.remove('expanded');
+                icon.textContent = '+';
+                localStorage.setItem(storageKeyPrefix + id, 'collapsed');
+            }
+        };
+
+        // Restore state from localStorage on page load
+        const savedState = localStorage.getItem(storageKeyPrefix + id);
+        if (savedState === 'expanded') {
+            setPanelState(true);
+        } else {
+            setPanelState(false); // Default to collapsed
+        }
+
+        // Add click event listener
+        trigger.addEventListener('click', () => {
+            const isCurrentlyExpanded = trigger.classList.contains('active');
+            setPanelState(!isCurrentlyExpanded);
+        });
+    });
+}
+
 // --- DRAFT MANAGEMENT FUNCTIONS ---
 
 function openDraftsModal() {
@@ -1998,4 +2047,3 @@ function updateMultipleShiftsIndicator() {
         }
     });
 }
-

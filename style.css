@@ -727,3 +727,46 @@ footer a:hover {
         box-shadow: inset 0 0 20px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.6);
     }
 }
+
+/* --- Collapsible Panel Styles --- */
+.collapsible-trigger {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none; /* Prevents text selection on click */
+    transition: background-color 0.2s ease;
+    padding: 0 10px; /* Add some padding for the hover effect */
+    border-radius: 5px; /* Match other elements */
+}
+
+.collapsible-trigger:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.collapsible-trigger.active {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.collapsible-icon {
+    font-size: 1.2em;
+    font-weight: bold;
+    transition: transform 0.3s ease-in-out;
+    margin-left: 10px;
+}
+
+.collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out;
+    /* The padding-top will be added when expanded */
+}
+
+.collapsible-content.expanded {
+    max-height: 1000px; /* A large enough value to accommodate the content */
+    padding-top: 15px; /* Create space below the header */
+}
+
+.collapsible-trigger.active .collapsible-icon {
+    transform: rotate(45deg); /* Rotates '+' to 'x' */
+}

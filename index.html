@@ -71,21 +71,23 @@
                 
                 <!-- Saved configurations -->
                 <div class="config-panel">
-                    <h4>Configuraciones Guardadas</h4>
-                    <div id="savedConfigs">
+                    <h4 id="config-collapsible" class="collapsible-trigger">Configuraciones Guardadas<span class="collapsible-icon">+</span></h4>
+                    <div id="savedConfigs" class="collapsible-content">
                         <!-- Saved configs will appear here -->
                     </div>
                 </div>
                 
                 <!-- Operator management -->
                 <div class="operators-panel">
-                    <h4>Gestión de Operarios</h4>
-                    <div class="add-operator">
-                        <input type="text" id="newOperator" placeholder="Nombre del operario">
-                        <button id="addOperatorBtn">Añadir</button>
-                    </div>
-                    <div id="operatorsList">
-                        <!-- Operators will appear here -->
+                    <h4 id="operator-collapsible" class="collapsible-trigger">Gestión de Operarios<span class="collapsible-icon">+</span></h4>
+                    <div class="collapsible-content">
+                        <div class="add-operator">
+                            <input type="text" id="newOperator" placeholder="Nombre del operario">
+                            <button id="addOperatorBtn">Añadir</button>
+                        </div>
+                        <div id="operatorsList">
+                            <!-- Operators will appear here -->
+                        </div>
                     </div>
                 </div>
 

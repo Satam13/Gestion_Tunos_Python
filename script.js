@@ -898,6 +898,117 @@ function renderEvents() {
     // Update operator hours after rendering events
     updateOperatorHours();
     updateMultipleShiftsIndicator();
+    checkRestPeriods(); // Check for rest violations after every render
+}
+
+// --- Rest Period Warning Logic ---
+
+/**
+ * Clears all existing rest period warnings from the calendar view.
+ */
+function clearRestWarnings() {
+    document.querySelectorAll('.rest-warning, .warn-border-right, .warn-border-left').forEach(el => {
+        el.classList.remove('rest-warning', 'warn-border-right', 'warn-border-left');
+    });
+}
+
+/**
+ * Checks for violations of the 12-hour rest period between shifts for the current month.
+ */
+function checkRestPeriods() {
+    clearRestWarnings(); // Start with a clean slate
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const MIN_REST_HOURS = 12;
+
+    operators.forEach(operator => {
+        // Iterate through consecutive days in the month
+        for (let day = 1; day < daysInMonth; day++) {
+            const lastShiftToday = getLastShiftOfDay(day, operator.id);
+            const firstShiftTomorrow = getFirstShiftOfDay(day + 1, operator.id);
+
+            // If there's a shift at the end of today and one at the start of tomorrow...
+            if (lastShiftToday && firstShiftTomorrow) {
+                const hoursBetween = calculateHoursBetween(lastShiftToday, firstShiftTomorrow);
+
+                if (hoursBetween < MIN_REST_HOURS) {
+                    // Violation detected, apply warning styles
+                    const cellTodayContainer = document.getElementById(`cell-${operator.id}-${day}`);
+                    const cellTomorrowContainer = document.getElementById(`cell-${operator.id}-${day + 1}`);
+
+                    if (cellTodayContainer && cellTomorrowContainer) {
+                        const cellToday = cellTodayContainer.parentElement;
+                        const cellTomorrow = cellTomorrowContainer.parentElement;
+
+                        cellToday.classList.add('warn-border-right');
+                        cellTomorrow.classList.add('warn-border-left');
+
+                        // Add the warning icon to the shift that starts too early
+                        cellTomorrow.classList.add('rest-warning');
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+// --- Rest Period Calculation Helpers ---
+
+/**
+ * Calculates the hours between the end of shift1 and the start of shift2.
+ * @param {object} shift1 The first shift object.
+ * @param {object} shift2 The second shift object.
+ * @returns {number} The difference in hours.
+ */
+function calculateHoursBetween(shift1, shift2) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const [endHour1, endMinute1] = shift1.endTime.split(':').map(Number);
+    const [startHour2, startMinute2] = shift2.startTime.split(':').map(Number);
+
+    const endDate1 = new Date(year, month, shift1.day, endHour1, endMinute1);
+
+    // Robustly check for overnight shifts by comparing parsed times
+    const [startHour1, startMinute1] = shift1.startTime.split(':').map(Number);
+    if (endHour1 < startHour1 || (endHour1 === startHour1 && endMinute1 < startMinute1)) {
+        endDate1.setDate(endDate1.getDate() + 1);
+    }
+
+    const startDate2 = new Date(year, month, shift2.day, startHour2, startMinute2);
+
+    return (startDate2 - endDate1) / (1000 * 60 * 60);
+}
+
+/**
+ * Gets the last shift of a given day for a specific operator.
+ * @param {number} day The day to check.
+ * @param {string} operatorId The operator's ID.
+ * @returns {object|null} The last shift object or null if none.
+ */
+function getLastShiftOfDay(day, operatorId) {
+    const dayShifts = events.filter(e => e.day === day && e.operatorId === operatorId);
+    if (dayShifts.length === 0) return null;
+    // Sort by start time descending to get the latest shift of the day
+    dayShifts.sort((a, b) => b.startTime.localeCompare(a.startTime));
+    return dayShifts[0];
+}
+
+/**
+ * Gets the first shift of a given day for a specific operator.
+ * @param {number} day The day to check.
+ * @param {string} operatorId The operator's ID.
+ * @returns {object|null} The first shift object or null if none.
+ */
+function getFirstShiftOfDay(day, operatorId) {
+    const dayShifts = events.filter(e => e.day === day && e.operatorId === operatorId);
+    if (dayShifts.length === 0) return null;
+    // Sort by start time ascending to get the earliest shift of the day
+    dayShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return dayShifts[0];
 }
 
 function updateMultipleShiftsIndicator() {
@@ -1571,45 +1682,37 @@ function updateOperatorHours() {
 // --- Collapsible Panel Logic ---
 function initCollapsiblePanels() {
     const triggers = document.querySelectorAll('.collapsible-trigger');
-    const storageKeyPrefix = 'collapsibleState-';
 
     triggers.forEach(trigger => {
+        // The content is the direct sibling of the h4 title
         const content = trigger.nextElementSibling;
-        const icon = trigger.querySelector('.collapsible-icon');
-        const id = trigger.id;
-
-        if (!content || !id || !icon) {
-            console.error('Collapsible structure is missing elements for trigger:', trigger);
+        if (!content || !content.classList.contains('collapsible-content')) {
+            console.error("Collapsible content not found for trigger:", trigger);
             return;
         }
 
-        // Function to set the state
-        const setPanelState = (isExpanded) => {
-            if (isExpanded) {
-                trigger.classList.add('active');
-                content.classList.add('expanded');
-                icon.textContent = '−'; // Minus sign (U+2212)
-                localStorage.setItem(storageKeyPrefix + id, 'expanded');
-            } else {
-                trigger.classList.remove('active');
-                content.classList.remove('expanded');
-                icon.textContent = '+';
-                localStorage.setItem(storageKeyPrefix + id, 'collapsed');
-            }
-        };
+        const panelId = trigger.id;
 
-        // Restore state from localStorage on page load
-        const savedState = localStorage.getItem(storageKeyPrefix + id);
-        if (savedState === 'expanded') {
-            setPanelState(true);
-        } else {
-            setPanelState(false); // Default to collapsed
+        // Restore state from localStorage, default to open
+        const isExpanded = localStorage.getItem(panelId) !== 'closed';
+
+        if (isExpanded) {
+            content.classList.add('expanded');
+            trigger.classList.add('active');
         }
 
-        // Add click event listener
         trigger.addEventListener('click', () => {
-            const isCurrentlyExpanded = trigger.classList.contains('active');
-            setPanelState(!isCurrentlyExpanded);
+            const currentlyExpanded = content.classList.contains('expanded');
+
+            if (currentlyExpanded) {
+                content.classList.remove('expanded');
+                trigger.classList.remove('active');
+                localStorage.setItem(panelId, 'closed');
+            } else {
+                content.classList.add('expanded');
+                trigger.classList.add('active');
+                localStorage.setItem(panelId, 'open');
+            }
         });
     });
 }

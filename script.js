@@ -73,6 +73,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Email confirm button
     document.getElementById('sendEmailConfirmBtn').addEventListener('click', handleSendEmail);
+
+    // UI listeners
+    document.getElementById('toggleSidebarBtn').addEventListener('click', toggleSidebar);
+
+    // Draft management listeners
+    document.getElementById('manageDraftsBtn').addEventListener('click', openDraftsModal);
+    document.getElementById('closeDraftsModal').addEventListener('click', closeDraftsModal);
+    document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -1556,6 +1564,153 @@ function updateOperatorHours() {
 }
 
 // Initialize the app when the DOM is ready
+
+// --- DRAFT MANAGEMENT FUNCTIONS ---
+
+function openDraftsModal() {
+    displayDrafts(); 
+    document.getElementById('draftsModal').style.display = 'block';
+}
+
+function closeDraftsModal() {
+    document.getElementById('draftsModal').style.display = 'none';
+}
+
+function saveDraft() {
+    const draftNameInput = document.getElementById('draftName');
+    const draftName = draftNameInput.value.trim();
+
+    if (!draftName) {
+        showNotification('Por favor, introduce un nombre para el borrador.', 'error');
+        return;
+    }
+
+    if (localStorage.getItem(`draft_${draftName}`)) {
+        if (!confirm(`Ya existe un borrador con el nombre '${draftName}'. ¿Deseas sobrescribirlo?`)) {
+            return;
+        }
+    }
+
+    const data = {
+        events,
+        savedConfigs,
+        operators,
+        currentDate: currentDate.toISOString()
+    };
+
+    const draftKey = `draft_${draftName}`;
+    localStorage.setItem(draftKey, JSON.stringify(data));
+
+    showNotification(`Borrador '${draftName}' guardado correctamente.`, 'success');
+    draftNameInput.value = '';
+    
+    displayDrafts();
+}
+
+function displayDrafts() {
+    const draftsList = document.getElementById('draftsList');
+    draftsList.innerHTML = '';
+
+    const drafts = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('draft_')) {
+            drafts.push(key.substring(6));
+        }
+    }
+
+    if (drafts.length === 0) {
+        draftsList.innerHTML = '<p style="color: #ccc; text-align: center;">No hay borradores guardados.</p>';
+        return;
+    }
+
+    drafts.sort().forEach(draftName => {
+        const draftItem = document.createElement('div');
+        draftItem.className = 'draft-item';
+        
+        draftItem.innerHTML = `
+            <span>${draftName}</span>
+            <div class="draft-actions">
+                <button class="config-btn load-draft-btn">Cargar</button>
+                <button class="config-btn delete-config-btn delete-draft-btn">Eliminar</button>
+            </div>
+        `;
+
+        draftItem.querySelector('.load-draft-btn').addEventListener('click', () => loadDraft(draftName));
+        draftItem.querySelector('.delete-draft-btn').addEventListener('click', () => deleteDraft(draftName));
+
+        draftsList.appendChild(draftItem);
+    });
+}
+
+function loadDraft(draftName) {
+    if (!confirm(`¿Cargar el borrador '${draftName}'? Se sobrescribirán todos los datos no guardados.`)) {
+        return;
+    }
+
+    const draftKey = `draft_${draftName}`;
+    const storedData = localStorage.getItem(draftKey);
+
+    if (storedData) {
+        try {
+            const data = JSON.parse(storedData);
+
+            if (data && Array.isArray(data.events) && Array.isArray(data.savedConfigs) && Array.isArray(data.operators)) {
+                events = data.events;
+                savedConfigs = data.savedConfigs;
+                operators = data.operators;
+                currentDate = data.currentDate ? new Date(data.currentDate) : new Date();
+
+                saveDataToStorage();
+
+                generateCalendar();
+                renderSavedConfigs();
+                
+                if (savedConfigs.length > 0) {
+                    setActiveConfig(savedConfigs[0].id);
+                } else {
+                    activeConfig = null;
+                }
+                
+                closeDraftsModal();
+                showNotification(`Borrador '${draftName}' cargado correctamente.`, 'success');
+            } else {
+                showNotification('El borrador está dañado o no tiene el formato correcto.', 'error');
+            }
+        } catch (error) {
+            showNotification('Error al procesar el archivo del borrador.', 'error');
+            console.error("Error parsing draft file:", error);
+        }
+    } else {
+        showNotification(`No se encontró el borrador '${draftName}'.`, 'error');
+    }
+}
+
+function deleteDraft(draftName) {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el borrador '${draftName}'? Esta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    const draftKey = `draft_${draftName}`;
+    localStorage.removeItem(draftKey);
+
+    showNotification(`Borrador '${draftName}' eliminado.`, 'success');
+    
+    displayDrafts();
+}
+
+// --- UI FUNCTIONS ---
+function toggleSidebar() {
+    const mainContent = document.querySelector('.main-content');
+    mainContent.classList.toggle('sidebar-hidden');
+    
+    const toggleBtn = document.getElementById('toggleSidebarBtn');
+    if (mainContent.classList.contains('sidebar-hidden')) {
+        toggleBtn.title = 'Mostrar Panel';
+    } else {
+        toggleBtn.title = 'Ocultar Panel';
+    }
+}
 
 // --- CONTEXT MENU FUNCTIONS ---
 

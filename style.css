@@ -311,6 +311,30 @@ h1 {
     background: rgba(46, 204, 113, 0.1); /* A slightly more visible green */
 }
 
+/* Rest Period Warning Styles */
+.rest-warning-border-right {
+    border-right: 3px solid #f0ad4e;
+    box-shadow: -4px 0 12px -4px #f0ad4e;
+}
+
+.rest-warning-border-left {
+    border-left: 3px solid #f0ad4e;
+    box-shadow: 4px 0 12px -4px #f0ad4e;
+}
+
+.rest-warning-icon {
+    position: absolute;
+    top: 50%;
+    right: -12px; /* Position in the middle of the border */
+    transform: translateY(-50%);
+    z-index: 15;
+    font-size: 1.1rem;
+    color: #f0ad4e;
+    text-shadow: 0 0 3px rgba(0,0,0,0.7);
+    pointer-events: none; /* Make sure it doesn't interfere with clicks */
+    -webkit-text-stroke: 1px black;
+}
+
 .event {
     position: absolute;
     top: 2px;

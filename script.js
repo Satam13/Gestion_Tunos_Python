@@ -185,6 +185,7 @@ function loadDataFromStorage() {
 
 // Generar calendario con operarios y días
 function generateCalendar() {
+    clearRestWarnings(); // Clear previous warnings
     const calendarGrid = document.getElementById('calendarGrid');
     calendarGrid.innerHTML = '';
     
@@ -298,6 +299,9 @@ function generateCalendar() {
 
     // Add grid-level listeners for rectangular selection
     calendarGrid.addEventListener('mousedown', startRectangularSelection);
+
+    // Check for rest period violations
+    checkRestPeriods();
 }
 
 
@@ -442,6 +446,100 @@ function initCollapsiblePanels() {
             // Save state to localStorage
             localStorage.setItem('collapsiblePanelStates', JSON.stringify(panelStates));
         });
+    });
+}
+
+
+// --- REST PERIOD WARNING FUNCTIONS ---
+
+function clearRestWarnings() {
+    // Remove all warning classes and icons
+    document.querySelectorAll('.rest-warning-border-right, .rest-warning-border-left').forEach(el => {
+        el.classList.remove('rest-warning-border-right', 'rest-warning-border-left');
+    });
+    document.querySelectorAll('.rest-warning-icon').forEach(icon => icon.remove());
+}
+
+function calculateHoursBetween(endDateTime, startDateTime) {
+    if (!endDateTime || !startDateTime) return Infinity;
+    const diffMillis = startDateTime - endDateTime;
+    return diffMillis / (1000 * 60 * 60);
+}
+
+function getShiftDateTime(event, type) {
+    if (!event) return null;
+    const time = type === 'start' ? event.startTime : event.endTime;
+    const [hours, minutes] = time.split(':').map(Number);
+    const date = new Date(event.year, event.month, event.day, hours, minutes);
+
+    // If it's an end time for an overnight shift, add a day
+    if (type === 'end' && event.startTime > event.endTime) {
+        date.setDate(date.getDate() + 1);
+    }
+    return date;
+}
+
+function getLastShiftOfDay(operatorId, day, month, year) {
+    const dayEvents = events.filter(e =>
+        e.operatorId === operatorId && e.day === day && e.month === month && e.year === year
+    );
+    if (dayEvents.length === 0) return null;
+    // Return the shift that ends latest
+    return dayEvents.reduce((last, current) => {
+        const lastEndTime = getShiftDateTime(last, 'end');
+        const currentEndTime = getShiftDateTime(current, 'end');
+        return currentEndTime > lastEndTime ? current : last;
+    });
+}
+
+function getFirstShiftOfDay(operatorId, day, month, year) {
+    const dayEvents = events.filter(e =>
+        e.operatorId === operatorId && e.day === day && e.month === month && e.year === year
+    );
+    if (dayEvents.length === 0) return null;
+    // Return the shift that starts earliest
+    return dayEvents.reduce((first, current) => {
+        const firstStartTime = getShiftDateTime(first, 'start');
+        const currentStartTime = getShiftDateTime(current, 'start');
+        return currentStartTime < firstStartTime ? current : first;
+    });
+}
+
+function checkRestPeriods() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    operators.forEach(op => {
+        for (let day = 1; day < daysInMonth; day++) {
+            const lastShiftToday = getLastShiftOfDay(op.id, day, month, year);
+            const firstShiftTomorrow = getFirstShiftOfDay(op.id, day + 1, month, year);
+
+            if (lastShiftToday && firstShiftTomorrow) {
+                const endDateTime = getShiftDateTime(lastShiftToday, 'end');
+                const startDateTime = getShiftDateTime(firstShiftTomorrow, 'start');
+
+                const hoursBetween = calculateHoursBetween(endDateTime, startDateTime);
+
+                if (hoursBetween < 12) {
+                    // Apply warning styles
+                    const cellToday = document.querySelector(`.calendar-cell[data-operator-id='${op.id}'][data-day='${day}']`);
+                    const cellTomorrow = document.querySelector(`.calendar-cell[data-operator-id='${op.id}'][data-day='${day + 1}']`);
+
+                    if (cellToday && cellTomorrow) {
+                        cellToday.classList.add('rest-warning-border-right');
+                        cellTomorrow.classList.add('rest-warning-border-left');
+
+                        // Add warning icon to the first cell
+                        const icon = document.createElement('div');
+                        icon.className = 'rest-warning-icon';
+                        icon.textContent = '⚠️';
+                        icon.title = `Descanso de ${hoursBetween.toFixed(1)}h insuficiente`;
+                        cellToday.appendChild(icon);
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -1062,6 +1160,7 @@ function renderEvents() {
     // Update operator hours after rendering events
     updateOperatorHours();
     updateMultipleShiftsIndicator();
+    checkRestPeriods(); // Check warnings after every render
 }
 
 function updateMultipleShiftsIndicator() {

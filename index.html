@@ -38,6 +38,7 @@
                     <button class="action-button" id="copySelection" disabled>Copiar Seleccionados</button>
                     <button class="action-button" id="moveSelection" disabled>Mover Seleccionados</button>
                     <button class="action-button" id="deleteSelection" disabled>Eliminar Seleccionados</button>
+                    <button class="action-button" id="statsBtn">Ver Estadísticas</button>
                     <button class="action-button" id="clearMonthBtn">Borrar Mes Actual</button>
                 </div>
             </div>
@@ -71,21 +72,23 @@
                 
                 <!-- Saved configurations -->
                 <div class="config-panel">
-                    <h4>Configuraciones Guardadas</h4>
-                    <div id="savedConfigs">
+                    <h4 id="config-collapsible" class="collapsible-trigger">Configuraciones Guardadas<span class="collapsible-icon">+</span></h4>
+                    <div id="savedConfigs" class="collapsible-content">
                         <!-- Saved configs will appear here -->
                     </div>
                 </div>
                 
                 <!-- Operator management -->
                 <div class="operators-panel">
-                    <h4>Gestión de Operarios</h4>
-                    <div class="add-operator">
-                        <input type="text" id="newOperator" placeholder="Nombre del operario">
-                        <button id="addOperatorBtn">Añadir</button>
-                    </div>
-                    <div id="operatorsList">
-                        <!-- Operators will appear here -->
+                    <h4 id="operator-collapsible" class="collapsible-trigger">Gestión de Operarios<span class="collapsible-icon">+</span></h4>
+                    <div class="collapsible-content">
+                        <div class="add-operator">
+                            <input type="text" id="newOperator" placeholder="Nombre del operario">
+                            <button id="addOperatorBtn">Añadir</button>
+                        </div>
+                        <div id="operatorsList">
+                            <!-- Operators will appear here -->
+                        </div>
                     </div>
                 </div>
 
@@ -145,6 +148,13 @@
         </ul>
     </div>
 
+    <!-- Day Header context menu -->
+    <div id="dayContextMenu" class="context-menu">
+        <ul class="context-menu-items">
+            <li class="context-menu-item" data-action="toggle-holiday">Marcar/Desmarcar Festivo</li>
+        </ul>
+    </div>
+
     <!-- Email modal -->
     <div id="emailModal" class="modal">
         <div class="modal-content">
@@ -184,5 +194,23 @@
     </div>
 
     <script src="script.js"></script>
+
+    <!-- Statistics Modal -->
+    <div id="statsModal" class="modal">
+        <div class="modal-content stats-modal-content">
+            <span class="close-modal" id="closeStatsModal">&times;</span>
+            <h3>Estadísticas del Mes</h3>
+            <div class="stats-tabs">
+                <button class="stats-tab-btn active" data-tab="individual">Individual</button>
+                <button class="stats-tab-btn" data-tab="group">Grupal</button>
+            </div>
+            <div id="statsIndividualContent" class="stats-content active">
+                <!-- Individual stats will be populated here -->
+            </div>
+            <div id="statsGroupContent" class="stats-content">
+                <!-- Group stats will be populated here -->
+            </div>
+        </div>
+    </div>
 </body>
 </html>

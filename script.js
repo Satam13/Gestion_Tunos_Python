@@ -3,6 +3,7 @@ let currentDate = new Date();
 let events = [];
 let savedConfigs = [];
 let operators = [];
+let holidays = []; // Array to store holiday dates as 'YYYY-MM-DD' strings
 let activeConfig = null;
 let editingConfigId = null;
 let selectedCells = [];
@@ -27,6 +28,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Init context menu
     initContextMenu();
+    initDayContextMenu();
+
+    // Init collapsible panels
+    initCollapsiblePanels();
     
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
@@ -81,6 +86,24 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('manageDraftsBtn').addEventListener('click', openDraftsModal);
     document.getElementById('closeDraftsModal').addEventListener('click', closeDraftsModal);
     document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
+
+    // Statistics Modal Listeners
+    document.getElementById('statsBtn').addEventListener('click', openStatsModal);
+    document.getElementById('closeStatsModal').addEventListener('click', closeStatsModal);
+    
+    document.querySelectorAll('.stats-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            
+            // Handle button active state
+            document.querySelectorAll('.stats-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Handle content visibility
+            document.querySelectorAll('.stats-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`stats${tab.charAt(0).toUpperCase() + tab.slice(1)}Content`).classList.add('active');
+        });
+    });
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -143,7 +166,8 @@ function saveDataToStorage() {
     const data = {
         events,
         savedConfigs,
-        operators
+        operators,
+        holidays
     };
     localStorage.setItem('calendarData', JSON.stringify(data));
 }
@@ -155,12 +179,14 @@ function loadDataFromStorage() {
         events = data.events || [];
         savedConfigs = data.savedConfigs || [];
         operators = data.operators || [];
+        holidays = data.holidays || [];
     }
 }
 
 // Generar calendario con operarios y días
 function generateCalendar() {
     const calendarGrid = document.getElementById('calendarGrid');
+    clearRestWarnings(); // Clear warnings before building the new month
     calendarGrid.innerHTML = '';
     
     const year = currentDate.getFullYear();
@@ -190,13 +216,16 @@ function generateCalendar() {
         const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
         const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
         const isToday = new Date().toDateString() === dayDate.toDateString();
+        const isHoliday = holidays.includes(formatDate(dayDate));
         
         const dayHeader = document.createElement('div');
         dayHeader.className = 'day-header';
         if (isToday) dayHeader.classList.add('today');
         if (isWeekend) dayHeader.classList.add('weekend');
+        if (isHoliday) dayHeader.classList.add('holiday');
         dayHeader.innerHTML = `${day}<br><small>${dayName}</small>`;
         dayHeader.dataset.day = day;
+        dayHeader.addEventListener('contextmenu', showDayContextMenu);
         calendarGrid.appendChild(dayHeader);
     }
     
@@ -220,11 +249,13 @@ function generateCalendar() {
             const dayDate = new Date(year, month, day);
             const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
             const isToday = new Date().toDateString() === dayDate.toDateString();
+            const isHoliday = holidays.includes(formatDate(dayDate));
             
             const cell = document.createElement('div');
             cell.className = 'calendar-cell';
             if (isToday) cell.classList.add('today');
             if (isWeekend) cell.classList.add('weekend');
+            if (isHoliday) cell.classList.add('holiday');
             cell.dataset.day = day;
             cell.dataset.operatorId = operator.id;
             cell.dataset.row = rowIndex;
@@ -895,6 +926,131 @@ function renderEvents() {
     // Update operator hours after rendering events
     updateOperatorHours();
     updateMultipleShiftsIndicator();
+    checkRestPeriods(); // Check for rest violations after every render
+}
+
+// --- Rest Period Warning Logic ---
+
+/**
+ * Clears all existing rest period warnings from the calendar view.
+ */
+function clearRestWarnings() {
+    document.querySelectorAll('.rest-warning, .warn-border-right, .warn-border-left').forEach(el => {
+        el.classList.remove('rest-warning', 'warn-border-right', 'warn-border-left');
+    });
+}
+
+/**
+ * Checks for violations of the 12-hour rest period between shifts for the current month.
+ */
+function checkRestPeriods() {
+    clearRestWarnings(); // Start with a clean slate
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const MIN_REST_HOURS = 12;
+
+    operators.forEach(operator => {
+        // Iterate through consecutive days in the month
+        for (let day = 1; day < daysInMonth; day++) {
+            const lastShiftToday = getLastShiftOfDay(day, operator.id);
+            const firstShiftTomorrow = getFirstShiftOfDay(day + 1, operator.id);
+
+            // If there's a shift at the end of today and one at the start of tomorrow...
+            if (lastShiftToday && firstShiftTomorrow) {
+                const hoursBetween = calculateHoursBetween(lastShiftToday, firstShiftTomorrow);
+                
+                if (hoursBetween < MIN_REST_HOURS) {
+                    // Violation detected, apply warning styles
+                    const cellTodayContainer = document.getElementById(`cell-${operator.id}-${day}`);
+                    const cellTomorrowContainer = document.getElementById(`cell-${operator.id}-${day + 1}`);
+
+                    if (cellTodayContainer && cellTomorrowContainer) {
+                        const cellToday = cellTodayContainer.parentElement;
+                        const cellTomorrow = cellTomorrowContainer.parentElement;
+
+                        cellToday.classList.add('warn-border-right');
+                        cellTomorrow.classList.add('warn-border-left');
+                        
+                        // Add the warning icon to the shift that starts too early
+                        cellTomorrow.classList.add('rest-warning');
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+// --- Rest Period Calculation Helpers ---
+
+/**
+ * Calculates the hours between the end of shift1 and the start of shift2.
+ * @param {object} shift1 The first shift object.
+ * @param {object} shift2 The second shift object.
+ * @returns {number} The difference in hours.
+ */
+function calculateHoursBetween(shift1, shift2) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const [endHour1, endMinute1] = shift1.endTime.split(':').map(Number);
+    const [startHour2, startMinute2] = shift2.startTime.split(':').map(Number);
+
+    const endDate1 = new Date(year, month, shift1.day, endHour1, endMinute1);
+    
+    // Robustly check for overnight shifts by comparing parsed times
+    const [startHour1, startMinute1] = shift1.startTime.split(':').map(Number);
+    if (endHour1 < startHour1 || (endHour1 === startHour1 && endMinute1 < startMinute1)) {
+        endDate1.setDate(endDate1.getDate() + 1);
+    }
+
+    const startDate2 = new Date(year, month, shift2.day, startHour2, startMinute2);
+
+    return (startDate2 - endDate1) / (1000 * 60 * 60);
+}
+
+/**
+ * Gets the last shift of a given day for a specific operator.
+ * @param {number} day The day to check.
+ * @param {string} operatorId The operator's ID.
+ * @returns {object|null} The last shift object or null if none.
+ */
+function getLastShiftOfDay(day, operatorId) {
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const dayShifts = events.filter(e => 
+        e.day === day && 
+        e.operatorId === operatorId &&
+        e.month === currentMonth &&
+        e.year === currentYear
+    );
+    if (dayShifts.length === 0) return null;
+    // Sort by start time descending to get the latest shift of the day
+    dayShifts.sort((a, b) => b.startTime.localeCompare(a.startTime));
+    return dayShifts[0];
+}
+
+/**
+ * Gets the first shift of a given day for a specific operator.
+ * @param {number} day The day to check.
+ * @param {string} operatorId The operator's ID.
+ * @returns {object|null} The first shift object or null if none.
+ */
+function getFirstShiftOfDay(day, operatorId) {
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    const dayShifts = events.filter(e => 
+        e.day === day && 
+        e.operatorId === operatorId &&
+        e.month === currentMonth &&
+        e.year === currentYear
+    );
+    if (dayShifts.length === 0) return null;
+    // Sort by start time ascending to get the earliest shift of the day
+    dayShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return dayShifts[0];
 }
 
 function updateMultipleShiftsIndicator() {
@@ -1565,6 +1721,44 @@ function updateOperatorHours() {
 
 // Initialize the app when the DOM is ready
 
+// --- Collapsible Panel Logic ---
+function initCollapsiblePanels() {
+    const triggers = document.querySelectorAll('.collapsible-trigger');
+
+    triggers.forEach(trigger => {
+        // The content is the direct sibling of the h4 title
+        const content = trigger.nextElementSibling;
+        if (!content || !content.classList.contains('collapsible-content')) {
+            console.error("Collapsible content not found for trigger:", trigger);
+            return;
+        }
+        
+        const panelId = trigger.id;
+
+        // Restore state from localStorage, default to open
+        const isExpanded = localStorage.getItem(panelId) !== 'closed';
+
+        if (isExpanded) {
+            content.classList.add('expanded');
+            trigger.classList.add('active');
+        }
+
+        trigger.addEventListener('click', () => {
+            const currentlyExpanded = content.classList.contains('expanded');
+            
+            if (currentlyExpanded) {
+                content.classList.remove('expanded');
+                trigger.classList.remove('active');
+                localStorage.setItem(panelId, 'closed');
+            } else {
+                content.classList.add('expanded');
+                trigger.classList.add('active');
+                localStorage.setItem(panelId, 'open');
+            }
+        });
+    });
+}
+
 // --- DRAFT MANAGEMENT FUNCTIONS ---
 
 function openDraftsModal() {
@@ -1699,6 +1893,163 @@ function deleteDraft(draftName) {
     displayDrafts();
 }
 
+// --- Statistics Calculation Engine ---
+
+/**
+ * Calculates all statistics for the current month.
+ * @returns {object} An object containing structured stats data.
+ */
+function calculateStatistics() {
+    const monthEvents = events.filter(e => e.month === currentDate.getMonth() && e.year === currentDate.getFullYear());
+    
+    let individualStats = {};
+    operators.forEach(operator => {
+        const opEvents = monthEvents.filter(e => e.operatorId === operator.id);
+        const workedDays = new Set(opEvents.map(e => e.day));
+        const workedWeekends = getWorkedWeekends(workedDays);
+        const workedHolidays = getWorkedHolidays(workedDays);
+
+        individualStats[operator.id] = {
+            name: operator.name,
+            workedHours: calculateOperatorHours(operator.id),
+            workedDays: workedDays.size,
+            shiftsByType: getShiftsByType(opEvents),
+            workedWeekends: workedWeekends.size,
+            workedHolidays: workedHolidays.length,
+        };
+    });
+
+    // Group stats calculation can be added here later
+
+    return {
+        individual: individualStats,
+        group: {} // Placeholder for group stats
+    };
+}
+
+/**
+ * Counts shifts by type for a given set of events.
+ * @param {Array} opEvents - The events for a single operator.
+ * @returns {object} An object with shift titles as keys and counts as values.
+ */
+function getShiftsByType(opEvents) {
+    return opEvents.reduce((acc, event) => {
+        acc[event.title] = (acc[event.title] || 0) + 1;
+        return acc;
+    }, {});
+}
+
+/**
+ * Counts the number of unique weekends an operator has worked.
+ * @param {Set<number>} workedDays - A set of day numbers that the operator worked.
+ * @returns {Set<string>} A set of unique weekend identifiers (e.g., '2025-W32').
+ */
+function getWorkedWeekends(workedDays) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const workedWeekendsSet = new Set();
+
+    workedDays.forEach(day => {
+        const date = new Date(year, month, day);
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+            // Create a unique key for the weekend (e.g., year + week number)
+            const weekNumber = getWeekNumber(date);
+            workedWeekendsSet.add(`${year}-W${weekNumber}`);
+        }
+    });
+    return workedWeekendsSet;
+}
+
+/**
+ * Gets the ISO week number for a date.
+ * @param {Date} d - The date.
+ * @returns {number} The week number.
+ */
+function getWeekNumber(d) {
+    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+}
+
+
+/**
+ * Counts how many holidays an operator has worked.
+ * @param {Set<number>} workedDays - A set of day numbers that the operator worked.
+ * @returns {Array<string>} An array of holiday dates worked.
+ */
+function getWorkedHolidays(workedDays) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const workedHolidaysList = [];
+    
+    workedDays.forEach(day => {
+        const date = new Date(year, month, day);
+        const dateString = formatDate(date);
+        if (holidays.includes(dateString)) {
+            workedHolidaysList.push(dateString);
+        }
+    });
+    return workedHolidaysList;
+}
+
+
+// --- Statistics Modal Functions ---
+function openStatsModal() {
+    const stats = calculateStatistics();
+    displayStatistics(stats);
+    document.getElementById('statsModal').style.display = 'block';
+}
+
+function displayStatistics(stats) {
+    const individualContent = document.getElementById('statsIndividualContent');
+    const groupContent = document.getElementById('statsGroupContent');
+
+    // Clear previous content
+    individualContent.innerHTML = '';
+    groupContent.innerHTML = '';
+
+    // Render Individual Stats
+    for (const operatorId in stats.individual) {
+        const opStats = stats.individual[operatorId];
+        const card = document.createElement('div');
+        card.className = 'operator-stats-card';
+
+        let shiftsHtml = '<tr><td colspan="2">Ninguno</td></tr>';
+        const shifts = Object.entries(opStats.shiftsByType);
+        if (shifts.length > 0) {
+            shiftsHtml = shifts.map(([title, count]) => `<tr><td>${title}</td><td>${count}</td></tr>`).join('');
+        }
+
+        card.innerHTML = `
+            <h4>${opStats.name}</h4>
+            <table class="stats-table">
+                <tr><th>Métrica</th><th>Valor</th></tr>
+                <tr><td>Horas Trabajadas</td><td>${opStats.workedHours.toFixed(1)}</td></tr>
+                <tr><td>Días Trabajados</td><td>${opStats.workedDays}</td></tr>
+                <tr><td>Fines de Semana Trabajados</td><td>${opStats.workedWeekends}</td></tr>
+                <tr><td>Festivos Trabajados</td><td>${opStats.workedHolidays}</td></tr>
+            </table>
+            <h5>Turnos por Tipo</h5>
+            <table class="stats-table">
+                <tr><th>Tipo de Turno</th><th>Cantidad</th></tr>
+                ${shiftsHtml}
+            </table>
+        `;
+        individualContent.appendChild(card);
+    }
+
+    // Render Group Stats (to be implemented)
+    groupContent.innerHTML = '<p>Las estadísticas grupales se implementarán en una futura actualización.</p>';
+}
+
+function closeStatsModal() {
+    document.getElementById('statsModal').style.display = 'none';
+}
+
+
 // --- UI FUNCTIONS ---
 function toggleSidebar() {
     const mainContent = document.querySelector('.main-content');
@@ -1791,6 +2142,87 @@ function showContextMenu(e) {
     contextMenu.style.left = `${e.clientX}px`;
     contextMenu.style.top = `${e.clientY}px`;
     contextMenu.style.display = 'block';
+}
+
+let contextDay = null; // To store the day for the day context menu
+
+function showDayContextMenu(e) {
+    e.preventDefault();
+    const dayHeader = e.target.closest('.day-header');
+    if (!dayHeader) return;
+
+    contextDay = parseInt(dayHeader.dataset.day);
+
+    const contextMenu = document.getElementById('dayContextMenu');
+    
+    // Position and show menu
+    contextMenu.style.left = `${e.clientX}px`;
+    contextMenu.style.top = `${e.clientY}px`;
+    contextMenu.style.display = 'block';
+
+    // Hide the other context menu if it's open
+    document.getElementById('customContextMenu').style.display = 'none';
+}
+
+// Helper to format a date as YYYY-MM-DD
+function formatDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function toggleHoliday() {
+    if (contextDay === null) return;
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const holidayDate = new Date(year, month, contextDay);
+    const dateString = formatDate(holidayDate);
+
+    const holidayIndex = holidays.indexOf(dateString);
+
+    if (holidayIndex > -1) {
+        // It's already a holiday, so unmark it
+        holidays.splice(holidayIndex, 1);
+        showNotification(`Día ${contextDay} desmarcado como festivo.`, "success");
+    } else {
+        // It's not a holiday, so mark it
+        holidays.push(dateString);
+        showNotification(`Día ${contextDay} marcado como festivo.`, "success");
+    }
+
+    saveDataToStorage();
+    generateCalendar(); // Re-render to show the style change
+}
+
+function initDayContextMenu() {
+    const contextMenu = document.getElementById('dayContextMenu');
+    
+    // This listener is now more robust, handles both menus
+    window.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            hideDayContextMenu();
+        }
+        const cellMenu = document.getElementById('customContextMenu');
+        if (!cellMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
+
+    contextMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (action === 'toggle-holiday') {
+            toggleHoliday();
+        }
+        hideDayContextMenu();
+    });
+}
+
+function hideDayContextMenu() {
+    document.getElementById('dayContextMenu').style.display = 'none';
+    contextDay = null;
 }
 
 function handleContextMenuAction(action) {

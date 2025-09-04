@@ -27,6 +27,32 @@ header {
     text-align: center;
 }
 
+.collapsible-trigger {
+    cursor: pointer;
+    position: relative;
+    padding-right: 25px; /* Space for the arrow */
+}
+
+.collapsible-trigger::after {
+    content: '▼';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%) rotate(0deg);
+    transition: transform 0.3s ease;
+    font-size: 0.8em;
+}
+
+.collapsible-trigger.active::after {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+.collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-out;
+}
+
 .logo {
     max-height: 120px;
     margin-bottom: 15px;
@@ -233,6 +259,10 @@ h1 {
     background: rgba(93, 173, 226, 0.2);
 }
 
+.day-header.holiday {
+    background: rgba(46, 204, 113, 0.25); /* A pleasant green */
+}
+
 .calendar-cell {
     height: 50px;
     background: rgba(255, 255, 255, 0.05);
@@ -275,6 +305,10 @@ h1 {
 
 .weekend .calendar-cell {
     background: rgba(255, 255, 255, 0.03);
+}
+
+.calendar-cell.holiday {
+    background: rgba(46, 204, 113, 0.1); /* A slightly more visible green */
 }
 
 .event {
@@ -726,4 +760,27 @@ footer a:hover {
     to {
         box-shadow: inset 0 0 20px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.6);
     }
+}
+
+/* Statistics Table Styles */
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 0.9rem;
+}
+
+.stats-table th, .stats-table td {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 10px;
+    text-align: left;
+}
+
+.stats-table thead {
+    background-color: rgba(0, 0, 0, 0.3);
+    font-weight: bold;
+}
+
+.stats-table tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.05);
 }

@@ -3,6 +3,7 @@ let currentDate = new Date();
 let events = [];
 let savedConfigs = [];
 let operators = [];
+let holidays = []; // Array to store holiday dates as 'YYYY-MM-DD' strings
 let activeConfig = null;
 let editingConfigId = null;
 let selectedCells = [];
@@ -27,6 +28,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Init context menu
     initContextMenu();
+    initDayContextMenu();
+    initCollapsiblePanels();
     
     // Event listeners
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
@@ -81,6 +84,26 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('manageDraftsBtn').addEventListener('click', openDraftsModal);
     document.getElementById('closeDraftsModal').addEventListener('click', closeDraftsModal);
     document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
+
+    // Statistics listeners
+    document.getElementById('showStatsBtn').addEventListener('click', showStatsModal);
+    document.getElementById('closeStatsModal').addEventListener('click', hideStatsModal);
+
+    // Global click listener to close any open context menu
+    window.addEventListener('click', (e) => {
+        const dayMenu = document.getElementById('dayContextMenu');
+        const cellMenu = document.getElementById('customContextMenu');
+
+        // Hide day menu if it's visible and the click is outside
+        if (dayMenu.style.display === 'block' && !dayMenu.contains(e.target)) {
+            hideDayContextMenu();
+        }
+
+        // Hide cell menu if it's visible and the click is outside
+        if (cellMenu.style.display === 'block' && !cellMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
     
     // Add default configurations if none exist
     if (savedConfigs.length === 0) {
@@ -143,7 +166,8 @@ function saveDataToStorage() {
     const data = {
         events,
         savedConfigs,
-        operators
+        operators,
+        holidays
     };
     localStorage.setItem('calendarData', JSON.stringify(data));
 }
@@ -155,6 +179,7 @@ function loadDataFromStorage() {
         events = data.events || [];
         savedConfigs = data.savedConfigs || [];
         operators = data.operators || [];
+        holidays = data.holidays || [];
     }
 }
 
@@ -190,13 +215,16 @@ function generateCalendar() {
         const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' });
         const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
         const isToday = new Date().toDateString() === dayDate.toDateString();
+        const isHoliday = holidays.includes(formatDate(dayDate));
         
         const dayHeader = document.createElement('div');
         dayHeader.className = 'day-header';
         if (isToday) dayHeader.classList.add('today');
         if (isWeekend) dayHeader.classList.add('weekend');
+        if (isHoliday) dayHeader.classList.add('holiday');
         dayHeader.innerHTML = `${day}<br><small>${dayName}</small>`;
         dayHeader.dataset.day = day;
+        dayHeader.addEventListener('contextmenu', showDayContextMenu);
         calendarGrid.appendChild(dayHeader);
     }
     
@@ -220,11 +248,13 @@ function generateCalendar() {
             const dayDate = new Date(year, month, day);
             const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
             const isToday = new Date().toDateString() === dayDate.toDateString();
+            const isHoliday = holidays.includes(formatDate(dayDate));
             
             const cell = document.createElement('div');
             cell.className = 'calendar-cell';
             if (isToday) cell.classList.add('today');
             if (isWeekend) cell.classList.add('weekend');
+            if (isHoliday) cell.classList.add('holiday');
             cell.dataset.day = day;
             cell.dataset.operatorId = operator.id;
             cell.dataset.row = rowIndex;
@@ -376,6 +406,143 @@ function updateRectangleSelection(endCell) {
             cell.classList.add('selected');
         }
     });
+}
+
+// --- COLLAPSIBLE PANEL FUNCTIONS ---
+
+function initCollapsiblePanels() {
+    const triggers = document.querySelectorAll('.collapsible-trigger');
+    const panelStates = JSON.parse(localStorage.getItem('collapsiblePanelStates')) || {};
+
+    triggers.forEach((trigger, index) => {
+        const content = trigger.nextElementSibling;
+        const panelId = `panel-${index}`;
+
+        // Set initial state from localStorage
+        if (panelStates[panelId] === 'open') {
+            trigger.classList.add('active');
+            content.style.maxHeight = content.scrollHeight + 'px';
+        } else {
+            // Default to closed
+            content.style.maxHeight = '0px';
+        }
+
+        trigger.addEventListener('click', function() {
+            this.classList.toggle('active');
+            const isActive = this.classList.contains('active');
+
+            if (isActive) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                panelStates[panelId] = 'open';
+            } else {
+                content.style.maxHeight = '0px';
+                panelStates[panelId] = 'closed';
+            }
+
+            // Save state to localStorage
+            localStorage.setItem('collapsiblePanelStates', JSON.stringify(panelStates));
+        });
+    });
+}
+
+
+// --- STATISTICS FUNCTIONS ---
+
+function hideStatsModal() {
+    document.getElementById('statsModal').style.display = 'none';
+}
+
+function showStatsModal() {
+    const statsContent = document.getElementById('statsContent');
+    statsContent.innerHTML = ''; // Clear previous stats
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const monthEvents = events.filter(e => e.month === month && e.year === year);
+
+    if (operators.length === 0) {
+        statsContent.innerHTML = '<p>No hay operarios para mostrar estadísticas.</p>';
+        document.getElementById('statsModal').style.display = 'block';
+        return;
+    }
+
+    // --- Operator Stats ---
+    let operatorStatsHtml = '<h4>Estadísticas por Operario</h4><table class="stats-table"><thead><tr><th>Operario</th><th>Horas Totales</th><th>Días Fin de Semana</th><th>Días Festivos</th></tr></thead><tbody>';
+    operators.forEach(op => {
+        const opEvents = monthEvents.filter(e => e.operatorId === op.id);
+        const totalHours = calculateOperatorHours(op.id);
+
+        // Create a set of all days the operator is considered to have worked
+        const workedDays = new Set();
+        opEvents.forEach(event => {
+            workedDays.add(event.day);
+            // If it's an overnight shift, add the next day as well
+            if (event.endTime < event.startTime) {
+                // Make sure the next day is still within the current month
+                if (event.day + 1 <= daysInMonth) {
+                    workedDays.add(event.day + 1);
+                }
+            }
+        });
+
+        let weekendsWorked = 0;
+        let holidaysWorked = 0;
+
+        // Now, iterate through the set of worked days to count weekends and holidays
+        workedDays.forEach(day => {
+            const date = new Date(year, month, day);
+            const dayOfWeek = date.getDay();
+            // Count if it's a Saturday (6) or Sunday (0)
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                weekendsWorked++;
+            }
+            // Count if the day is in the holidays list
+            if (holidays.includes(formatDate(date))) {
+                holidaysWorked++;
+            }
+        });
+
+        operatorStatsHtml += `
+            <tr>
+                <td>${op.name}</td>
+                <td>${totalHours.toFixed(1)}</td>
+                <td>${weekendsWorked}</td>
+                <td>${holidaysWorked}</td>
+            </tr>
+        `;
+    });
+    operatorStatsHtml += '</tbody></table>';
+
+    // --- Shift Stats ---
+    let shiftStatsHtml = '<h4 style="margin-top: 20px;">Estadísticas por Turno</h4><table class="stats-table"><thead><tr><th>Tipo de Turno</th><th>Cantidad Total</th></tr></thead><tbody>';
+    const shiftCounts = {};
+    monthEvents.forEach(event => {
+        shiftCounts[event.title] = (shiftCounts[event.title] || 0) + 1;
+    });
+
+    for (const shiftTitle in shiftCounts) {
+        shiftStatsHtml += `
+            <tr>
+                <td>${shiftTitle}</td>
+                <td>${shiftCounts[shiftTitle]}</td>
+            </tr>
+        `;
+    }
+    shiftStatsHtml += '</tbody></table>';
+
+    // --- General Stats ---
+    const totalMonthHours = operators.reduce((acc, op) => acc + calculateOperatorHours(op.id), 0);
+    let generalStatsHtml = `
+        <h4 style="margin-top: 20px;">Estadísticas Generales</h4>
+        <p><strong>Horas totales en el mes:</strong> ${totalMonthHours.toFixed(1)}</p>
+        <p><strong>Total de turnos asignados:</strong> ${monthEvents.length}</p>
+        <p><strong>Días festivos en el mes:</strong> ${holidays.filter(h => new Date(h).getMonth() === month).length}</p>
+    `;
+
+    statsContent.innerHTML = operatorStatsHtml + shiftStatsHtml + generalStatsHtml;
+    document.getElementById('statsModal').style.display = 'block';
 }
 
 function toggleCellSelection(cell) {
@@ -1716,13 +1883,6 @@ function toggleSidebar() {
 
 function initContextMenu() {
     const contextMenu = document.getElementById('customContextMenu');
-    
-    // Hide menu if clicked outside
-    window.addEventListener('click', (e) => {
-        if (!contextMenu.contains(e.target)) {
-            hideContextMenu();
-        }
-    });
 
     // Handle actions
     contextMenu.addEventListener('click', (e) => {
@@ -1742,7 +1902,8 @@ function hideContextMenu() {
 
 function showContextMenu(e) {
     e.preventDefault();
-    
+    hideDayContextMenu(); // Close day menu if open
+
     const clickedCell = e.target.closest('.calendar-cell');
     if (!clickedCell) return;
 
@@ -1791,6 +1952,75 @@ function showContextMenu(e) {
     contextMenu.style.left = `${e.clientX}px`;
     contextMenu.style.top = `${e.clientY}px`;
     contextMenu.style.display = 'block';
+}
+
+let contextDay = null; // To store the day for the day context menu
+
+function showDayContextMenu(e) {
+    e.preventDefault();
+    hideContextMenu(); // Close cell menu if open
+
+    const dayHeader = e.target.closest('.day-header');
+    if (!dayHeader) return;
+
+    contextDay = parseInt(dayHeader.dataset.day);
+
+    const contextMenu = document.getElementById('dayContextMenu');
+
+    // Position and show menu
+    contextMenu.style.left = `${e.clientX}px`;
+    contextMenu.style.top = `${e.clientY}px`;
+    contextMenu.style.display = 'block';
+}
+
+// Helper to format a date as YYYY-MM-DD
+function formatDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function toggleHoliday() {
+    if (contextDay === null) return;
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const holidayDate = new Date(year, month, contextDay);
+    const dateString = formatDate(holidayDate);
+
+    const holidayIndex = holidays.indexOf(dateString);
+
+    if (holidayIndex > -1) {
+        // It's already a holiday, so unmark it
+        holidays.splice(holidayIndex, 1);
+        showNotification(`Día ${contextDay} desmarcado como festivo.`, "success");
+    } else {
+        // It's not a holiday, so mark it
+        holidays.push(dateString);
+        showNotification(`Día ${contextDay} marcado como festivo.`, "success");
+    }
+
+    saveDataToStorage();
+    generateCalendar(); // Re-render to show the style change
+}
+
+function initDayContextMenu() {
+    const contextMenu = document.getElementById('dayContextMenu');
+
+    contextMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (action === 'toggle-holiday') {
+            toggleHoliday();
+        }
+        hideDayContextMenu();
+    });
+}
+
+function hideDayContextMenu() {
+    document.getElementById('dayContextMenu').style.display = 'none';
+    contextDay = null;
 }
 
 function handleContextMenuAction(action) {

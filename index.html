@@ -66,6 +66,11 @@
                     <div id="shiftColorPicker"></div>
                     <div class="color-preview" id="colorPreview"></div>
                 </div>
+
+                <div class="form-group">
+                    <label for="shiftOperators">Operarios necesarios:</label>
+                    <input type="number" id="shiftOperators" value="1" min="1" style="width: 60px;">
+                </div>
                 
                 <button id="saveConfigBtn">Guardar Configuración</button>
                 <button id="updateConfigBtn" style="display: none;">Actualizar Configuración</button>
@@ -90,6 +95,12 @@
                             <!-- Operators will appear here -->
                         </div>
                     </div>
+                </div>
+
+                <!-- Advanced Actions -->
+                <div class="advanced-actions-panel">
+                    <h4>Acciones Avanzadas</h4>
+                    <button id="calculateDistributionBtn">Calcular Reparto Equitativo</button>
                 </div>
 
                 <!-- Draft management -->
@@ -194,6 +205,17 @@
     </div>
 
     <script src="script.js"></script>
+
+    <!-- Calculation Results Modal -->
+    <div id="calculationModal" class="modal">
+        <div class="modal-content wide-modal-content">
+            <span class="close-modal" id="closeCalculationModal">&times;</span>
+            <h3>Resultado del Reparto Equitativo</h3>
+            <div id="calculationResultContent">
+                <!-- Results will be populated here by JavaScript -->
+            </div>
+        </div>
+    </div>
 
     <!-- Statistics Modal -->
     <div id="statsModal" class="modal">

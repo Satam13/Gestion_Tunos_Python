@@ -872,3 +872,40 @@ footer a:hover {
     border-bottom: 1px solid rgba(255,255,255,0.2);
     padding-bottom: 8px;
 }
+
+/* --- Calculation Modal Styles --- */
+.wide-modal-content {
+    max-width: 80vw;
+    width: 700px; /* A bit smaller than stats modal */
+    margin: 5% auto;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#calculationResultContent h4 {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 8px;
+}
+
+#calculationResultContent h4:first-child {
+    margin-top: 0;
+}
+
+#calculationResultContent .operator-stats-card {
+     background: rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+#calculationResultContent ul {
+    list-style-position: inside;
+    padding-left: 10px;
+}
+
+#calculationResultContent ul li {
+    margin-bottom: 8px;
+}

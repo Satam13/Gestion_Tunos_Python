@@ -90,6 +90,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Statistics Modal Listeners
     document.getElementById('statsBtn').addEventListener('click', openStatsModal);
     document.getElementById('closeStatsModal').addEventListener('click', closeStatsModal);
+
+    // Calculation Modal Listeners
+    document.getElementById('calculateDistributionBtn').addEventListener('click', handleCalculateDistribution);
+    document.getElementById('closeCalculationModal').addEventListener('click', () => {
+        document.getElementById('calculationModal').style.display = 'none';
+    });
     
     document.querySelectorAll('.stats-tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -407,6 +413,110 @@ function updateRectangleSelection(endCell) {
             cell.classList.add('selected');
         }
     });
+}
+
+// --- EQUITABLE DISTRIBUTION CALCULATION FUNCTIONS ---
+
+async function handleCalculateDistribution() {
+    if (operators.length === 0) {
+        showNotification("No hay operarios registrados para hacer el cálculo.", "warning");
+        return;
+    }
+    if (savedConfigs.length === 0) {
+        showNotification("No hay configuraciones de turno guardadas para hacer el cálculo.", "warning");
+        return;
+    }
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const dataToSend = {
+        daysInMonth: daysInMonth,
+        totalOperators: operators.length,
+        shiftsConfig: savedConfigs.map(c => ({
+            title: c.title,
+            startTime: c.startTime,
+            endTime: c.endTime,
+            operators: c.operators || 1
+        }))
+    };
+
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/calculate_distribution', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(dataToSend),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Ocurrió un error en el servidor.');
+        }
+
+        displayCalculationResults(result);
+
+    } catch (error) {
+        console.error('Error calculating distribution:', error);
+        showNotification(`Error: ${error.message}`, 'error');
+    }
+}
+
+function displayCalculationResults(data) {
+    const contentDiv = document.getElementById('calculationResultContent');
+    contentDiv.innerHTML = ''; // Clear previous results
+
+    // --- Summary Section ---
+    const summary = data.summary;
+    let summaryHtml = `
+        <h4>Resumen General del Cálculo</h4>
+        <p>
+            Cálculo para un periodo de <strong>${summary.days_in_period} días</strong>
+            con un total de <strong>${summary.total_operators} operarios</strong>.
+        </p>
+        <table class="stats-table">
+            <tr><th>Métrica</th><th>Valor</th></tr>
+            <tr><td>Total de horas de servicio a cubrir</td><td>${summary.total_service_hours.toFixed(2)} horas</td></tr>
+            <tr><td>Promedio de horas por operario</td><td>${summary.avg_hours_per_operator.toFixed(2)} horas</td></tr>
+            <tr><td>Total de turnos a realizar</td><td>${summary.total_shifts} turnos</td></tr>
+            <tr><td>Promedio de turnos por operario</td><td>${summary.avg_shifts_per_operator.toFixed(2)} turnos</td></tr>
+        </table>
+    `;
+
+    contentDiv.innerHTML += summaryHtml;
+
+    // --- Distribution Section ---
+    contentDiv.innerHTML += `<h4>Propuesta de Reparto Equitativo de Turnos</h4>`;
+
+    for (const duration in data.distribution_by_duration) {
+        const distData = data.distribution_by_duration[duration];
+        const dist = distData.distribution;
+
+        let distHtml = `
+            <div class="operator-stats-card">
+                <h5>Distribución para turnos de ${distData.hours} horas</h5>
+                <p>Total de turnos de ${distData.hours}h a cubrir: <strong>${distData.total_shifts}</strong></p>
+                <p>Promedio por operario: <strong>${distData.avg_shifts_per_operator.toFixed(3)}</strong> turnos</p>
+                <p>Para un reparto equitativo:</p>
+                <ul>
+        `;
+
+        if (dist.num_recipients_higher > 0) {
+            distHtml += `<li><strong>${dist.num_recipients_higher} operarios</strong> realizarán <strong>${dist.higher_items} turnos</strong> de ${distData.hours}h.</li>`;
+        }
+        if (dist.num_recipients_base > 0) {
+            distHtml += `<li><strong>${dist.num_recipients_base} operarios</strong> realizarán <strong>${dist.base_items} turnos</strong> de ${distData.hours}h.</li>`;
+        }
+
+        distHtml += `</ul></div>`;
+        contentDiv.innerHTML += distHtml;
+    }
+
+    // Show the modal
+    document.getElementById('calculationModal').style.display = 'block';
 }
 
 function toggleCellSelection(cell) {
@@ -1096,6 +1206,7 @@ function saveConfig() {
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     const color = document.getElementById('colorPreview').style.backgroundColor;
+    const operators = parseInt(document.getElementById('shiftOperators').value, 10) || 1;
     
     if (!title) {
         showNotification("Por favor introduce un nombre para el turno", "error");
@@ -1113,7 +1224,8 @@ function saveConfig() {
         title,
         startTime,
         endTime,
-        color: hexColor
+        color: hexColor,
+        operators: operators
     };
     
     // Add config
@@ -1128,6 +1240,7 @@ function saveConfig() {
     document.getElementById('shiftTitle').value = '';
     document.getElementById('startTime').value = '06:00';
     document.getElementById('endTime').value = '18:00';
+    document.getElementById('shiftOperators').value = '1';
     
     // Show notification
     showNotification(`Configuración "${title}" guardada`, "success");
@@ -1141,7 +1254,8 @@ function updateConfig() {
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
     const color = document.getElementById('colorPreview').style.backgroundColor;
-    
+    const operators = parseInt(document.getElementById('shiftOperators').value, 10) || 1;
+
     if (!title) {
         showNotification("Por favor introduce un nombre para el turno", "error");
         return;
@@ -1160,7 +1274,8 @@ function updateConfig() {
             title,
             startTime,
             endTime,
-            color: hexColor
+            color: hexColor,
+            operators: operators
         };
         
         // Update active config if this was active
@@ -2379,6 +2494,7 @@ function editConfig(configId) {
     document.getElementById('shiftTitle').value = config.title;
     document.getElementById('startTime').value = config.startTime;
     document.getElementById('endTime').value = config.endTime;
+    document.getElementById('shiftOperators').value = config.operators || 1;
     
     // Update color picker
     document.getElementById('colorPreview').style.backgroundColor = config.color;
